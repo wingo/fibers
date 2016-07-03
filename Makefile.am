@@ -24,7 +24,8 @@ godir=$(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/ccache
 
 SOURCES = \
 	fibers/epoll.scm \
-	fibers.scm
+	fibers.scm \
+	web/server/fibers.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
 extlib_LTLIBRARIES = epoll.la
