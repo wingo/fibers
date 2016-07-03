@@ -22,7 +22,9 @@ include build-aux/guile.am
 moddir=$(prefix)/share/guile/site/$(GUILE_EFFECTIVE_VERSION)
 godir=$(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/ccache
 
-SOURCES = fibers/epoll.scm
+SOURCES = \
+	fibers/epoll.scm \
+	fibers.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
 extlib_LTLIBRARIES = epoll.la
