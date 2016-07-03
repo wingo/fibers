@@ -34,6 +34,9 @@ AC_PROG_CC
 AC_STDC_HEADERS
 AC_PROG_LIBTOOL
 
+AC_CHECK_HEADERS([sys/epoll.h])
+AC_CHECK_FUNCS([epoll_create epoll_create1])
+
 WARN_CFLAGS=-Wall
 AC_ARG_ENABLE([Werror], AC_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
         [], WARN_CFLAGS="-Wall -Werror")

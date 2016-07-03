@@ -15,19 +15,24 @@
 # License along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 
+ACLOCAL_AMFLAGS = -I m4
+
 include build-aux/guile.am
 
 moddir=$(prefix)/share/guile/site/$(GUILE_EFFECTIVE_VERSION)
 godir=$(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/ccache
 
-ACLOCAL_AMFLAGS = -I m4
+SOURCES = fibers/epoll.scm
 
-SOURCES =
-
-# info_TEXINFOS = doc/guile-present.texi
+extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
+extlib_LTLIBRARIES = epoll.la
+AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
+epoll_la_SOURCES = epoll.c
+epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+epoll_la_LIBADD = $(GUILE_LIBS)
+epoll_la_LDFLAGS = -export-dynamic -module
 
 # TESTS=tests/org-mode.scm
-
 # TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env guile -s
 
 EXTRA_DIST += \

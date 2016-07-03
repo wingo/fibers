@@ -20,3 +20,9 @@
 /libtool
 /stamp-h1
 /m4
+/.deps
+/.libs
+/build-aux/depcomp
+/epoll.la
+/epoll_la-epoll.lo
+*.go
