@@ -1,0 +1,59 @@
+About Fibers
+============
+
+Fibers is a facility that provides Erlang-like concurrency for Guile
+Scheme.
+
+
+A pasteable introduction to using Fibers
+========================================
+
+;; Paste this into your guile interpreter!
+
+(use-modules (fibers))
+
+;; For most useful things, you have to make a surface first
+
+
+
+Copying Fibers
+==============
+
+Distribution of Fibers is under the LGPLv3+. See the COPYING file for
+more information.
+
+
+Contact info
+============
+
+  Mailing List: guile-user@gnu.org
+  Homepage:     https://github.com/andywingo/fibers
+  Download:     https://wingolog.org/pub/fibers/
+
+
+Build dependencies
+==================
+
+* Guile 2.1.3 or newer
+  http://www.gnu.org/software/guile/
+
+
+Installation quickstart
+=======================
+
+Install using the standard autotools incantation:
+  ./configure --prefix=/opt/guile && make && make install.
+
+Build from Git using ./autogen.sh --prefix=/opt/fibers && make.
+
+You can run without installing, just run './env guile'.
+
+
+Copying this file
+=================
+
+Copyright (C) 2007,2011 Andy Wingo <wingo pobox.com>
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice
+and this notice are preserved.

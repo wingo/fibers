@@ -1,0 +1,18 @@
+Fibers NEWS
+
+
+Fibers is a facility that provides Erlang-like concurrency for Guile
+Scheme.
+
+
+fibers 0.1.0 -- 2016-07-02
+==========================
+
+* First release.
+
+
+Copyright (C) 2016 Andy Wingo <wingo at pobox dot com>
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice
+and this notice are preserved.

@@ -1,0 +1,18 @@
+Hacking Fibers
+==============
+
+git clone https://github.com/andywingo/fibers.git
+cd fibers
+autoreconf -vif && ./configure --prefix=/opt/guile && make && sudo make install
+
+See the TODO file for pending tasks.
+
+
+Copying this file
+=================
+
+Copyright (C) 2016 Andy Wingo <wingo@pobox.com>.
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice
+and this notice are preserved.
