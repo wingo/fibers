@@ -21,6 +21,7 @@
   #:use-module ((srfi srfi-1) #:select (append-reverse!))
   #:use-module (srfi srfi-9)
   #:use-module (fibers epoll)
+  #:use-module (ice-9 match)
   #:use-module (ice-9 ports internal)
   #:use-module (ice-9 suspendable-ports)
   #:replace (sleep)
@@ -93,48 +94,53 @@
 (define internal-time-units-per-millisecond
   (/ internal-time-units-per-second 1000))
 
+(define (schedule-fibers-for-fd fd revents ctx)
+  (let ((sources (hashv-ref (scheduler-sources ctx) fd)))
+    (for-each (lambda (source)
+                ;; FIXME: If we were waiting with a timeout, this
+                ;; fiber might still be in "sleepers", and we should
+                ;; probably remove it.  Currently we don't do timed
+                ;; waits though, only sleeps.
+                (unless (zero? (logand revents
+                                       (logior (source-events source) EPOLLERR)))
+                  (resume (source-fiber source) (lambda () revents) ctx)))
+              (cdr sources))
+    (cond
+     ((zero? (logand revents EPOLLERR))
+      (hashv-remove! (scheduler-sources ctx) fd)
+      (epoll-remove! (scheduler-epfd ctx) fd))
+     (else
+      (set-cdr! sources '())
+      ;; Reset active events and expiration time, respectively.
+      (set-car! (car sources) #f)
+      (set-cdr! (car sources) #f)))))
+
 (define (poll-for-events ctx)
-  ;; Run through the work list.  When it's empty, wait for I/O, and
-  ;; start again.
-  (define (schedule-fibers fd revents seed)
-    (let ((sources (hashv-ref (scheduler-sources ctx) fd)))
-      (for-each (lambda (source)
-                  ;; FIXME: If we were waiting with a timeout, this
-                  ;; fiber might still be in "sleepers", and we should
-                  ;; probably remove it.  Currently we don't do timed
-                  ;; waits though, only sleeps.
-                  (unless (zero? (logand revents
-                                         (logior (source-events source) EPOLLERR)))
-                    (resume (source-fiber source) (lambda () revents) ctx)))
-                (cdr sources))
-      (cond
-       ((zero? (logand revents EPOLLERR))
-        (hashv-remove! (scheduler-sources ctx) fd)
-        (epoll-remove! (scheduler-epfd ctx) fd))
-       (else
-        (set-cdr! sources '())
-        ;; Reset active events and expiration time, respectively.
-        (set-car! (car sources) #f)
-        (set-cdr! (car sources) #f)))
-      seed))
-  (let* ((sleepers (scheduler-sleepers ctx))
-         (waketime (and (pair? sleepers) (cdar sleepers))))
+  ;; Called when the runnables list is empty.  Poll for some active
+  ;; FD's and schedule their corresponding fibers.  Also schedule any
+  ;; sleepers that have timed out.
+  (let ((sleepers (scheduler-sleepers ctx)))
     (epoll (scheduler-epfd ctx)
            32                           ; maxevents
-           (if waketime
-               (let ((now (get-internal-real-time)))
-                 (if (< waketime now)
-                     0
-                     (round/ (- waketime now)
-                             internal-time-units-per-millisecond)))
-               -1)
-           #:folder schedule-fibers)
+           (match sleepers
+             ;; The sleepers list is sorted so the first element
+             ;; should be the one whose wake time is soonest.
+             (((fiber . expiry) . sleepers)
+              (let ((now (get-internal-real-time)))
+                (if (< expiry now)
+                    0
+                    (round/ (- expiry now)
+                            internal-time-units-per-millisecond))))
+             (_ -1))
+           #:folder (lambda (fd revents seed)
+                      (schedule-fibers-for-fd fd revents ctx)
+                      seed))
     (let ((now (get-internal-real-time)))
-      ;; We build a list and process it in reverse so that the sleepers
-      ;; with the earliest wake-time run first.  If schedule-fibers
-      ;; already scheduled a fiber -- i.e. its timeout ran out, *and*
-      ;; it was woken up for an event -- then this resume will have no
-      ;; effect because the fiber was already runnable.
+      ;; Resume fibers whose sleep has timed out.  Do it in such a way
+      ;; that the one with the earliest expiry is resumed last, so
+      ;; that it will will end up first on the runnable list.  If one
+      ;; of these fibers has already been resumed (perhaps because the
+      ;; fd is readable or writable), this resume will have no effect.
       (let wake-sleepers ((sleepers sleepers) (wakers '()))
         (if (and (pair? sleepers) (>= now (cdar sleepers)))
             (wake-sleepers (cdr sleepers) (cons (caar sleepers) wakers))
