@@ -19,7 +19,6 @@
 
 (use-modules (rnrs bytevectors)
              (fibers)
-             (ice-9 binary-ports)
              (ice-9 textual-ports)
              (ice-9 rdelim)
              (ice-9 match))
