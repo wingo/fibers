@@ -21,6 +21,7 @@
   #:use-module ((srfi srfi-1) #:select (append-reverse!))
   #:use-module (srfi srfi-9)
   #:use-module (fibers epoll)
+  #:use-module (ice-9 fdes-finalizers)
   #:use-module (ice-9 match)
   #:use-module (ice-9 ports internal)
   #:use-module (ice-9 suspendable-ports)
@@ -230,6 +231,20 @@
   (unless (zero? (logand revents EPOLLERR))
     (error "error reading from port" port)))
 
+(define (finalize-fd ctx fd)
+  "Remove data associated with @var{fd} from the scheduler @var{ctx}.
+Called by Guile just before Guile goes to close a file descriptor, in
+response either to an explicit call to @code{close-port}, or because
+the port became unreachable.  In the latter case, this call may come
+from a finalizer thread."
+  ;; When a file descriptor is closed, the kernel silently removes it
+  ;; from any associated epoll sets, so we don't need to do anything
+  ;; there.
+  ;;
+  ;; FIXME: Take a lock on the sources table?
+  ;; FIXME: Wake all sources with EPOLLERR.
+  (hashv-remove! (scheduler-sources ctx) fd))
+
 (define (wait-for-events port fd events)
   (handle-events
    port
@@ -250,6 +265,7 @@
           (hashv-set! (scheduler-sources ctx)
                       fd (acons events #f
                                 (list (make-source events #f fiber))))
+          (add-fdes-finalizer! fd (lambda (fd) (finalize-fd ctx fd)))
           (epoll-add! (scheduler-epfd ctx) fd (logior events EPOLLONESHOT)))))))))
 
 (define (add-sleeper! ctx fiber seconds)
