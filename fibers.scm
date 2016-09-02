@@ -150,18 +150,6 @@
                           (resume fiber (lambda () 0) ctx))
                         wakers)))))))
 
-(define (next-fiber ctx)
-  (let lp ()
-    (let ((runnables (scheduler-runnables ctx)))
-      (cond
-       ((pair? runnables)
-        (let ((fiber (car runnables)))
-          (set-scheduler-runnables! ctx (cdr runnables))
-          fiber))
-       (else
-        (poll-for-events ctx)
-        (lp))))))
-
 (define (run-fiber ctx fiber)
   (when (eq? (fiber-state fiber) 'runnable)
     (parameterize ((current-fiber fiber))
@@ -216,8 +204,18 @@
                  (current-read-waiter wait-for-readable)
                  (current-write-waiter wait-for-writable))
     (let lp ()
-      (run-fiber ctx (next-fiber ctx))
-      (lp))))
+      (let ((runnables (scheduler-runnables ctx)))
+        (cond
+         ((pair? runnables)
+          (let ((fiber (car runnables)))
+            (set-scheduler-runnables! ctx (cdr runnables))
+            (run-fiber ctx fiber)
+            (lp)))
+         ((poll-for-events ctx)
+          (lp))
+         (else
+          ;; Nothing runnable; quit.
+          (values)))))))
 
 (define* (spawn thunk #:optional (ctx (ensure-current-scheduler)))
   (create-fiber ctx thunk))
