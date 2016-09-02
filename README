@@ -12,9 +12,6 @@ A pasteable introduction to using Fibers
 
 (use-modules (fibers))
 
-;; For most useful things, you have to make a surface first
-
-
 
 Copying Fibers
 ==============
