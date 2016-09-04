@@ -1,0 +1,299 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename fibers.info
+@settitle Fibers
+@c %**end of header
+
+@set VERSION 0.1
+@set UPDATED 17 July 2016
+
+@copying
+This manual is for Fibers (version @value{VERSION}, updated
+@value{UPDATED})
+
+Copyright 2016 Andy Wingo
+
+@quotation
+@c For more information, see COPYING.docs in the fibers
+@c distribution.
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+@end quotation
+@end copying
+
+@dircategory The Algorithmic Language Scheme
+@direntry
+* Fibers: (fibers.info).  Lightweight concurrency for Guile.
+@end direntry
+
+@titlepage
+@title Fibers
+@subtitle version @value{VERSION}, updated @value{UPDATED}
+@author Andy Wingo
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@ifnottex
+@node Top
+@top Fibers
+
+
+@insertcopying
+@menu
+* Introduction::                     What's this all about?
+@end menu
+
+@end ifnottex
+
+@iftex
+@shortcontents
+@end iftex
+
+@node Introduction
+@chapter Introduction
+
+Fibers is a facility for lightweight concurrency in Guile.
+
+@section A brief history of language facilities for concurrency
+
+Modern machines have the raw capability to serve hundreds of thousands
+of simultaneous long-lived connections, but it's often hard to manage
+this at the software level.  Fibers tries to solve this problem in a
+nice way.  Before discussing the approach taken in Fibers, it's worth
+spending some time on history to see how we got here.
+
+One of the most dominant patterns for concurrency these days is
+``callbacks'', notably in the Twisted library for Python and the
+Node.js run-time for JavaScript.  The basic observation in the
+callback approach to concurrency is that the efficient way to handle
+tens of thousands of connections at once is with low-level operating
+system facilities like @code{poll} or @code{epoll}.  You add all of
+the file descriptors that you are interested in to a ``poll set'' and
+then ask the operating system which ones are readable or writable, as
+appropriate.  Once the operating system says ``yes, file descriptor
+7145 is readable'', you can do something with that socket; but what?
+With callbacks, the answer is ``call a user-supplied closure'': a
+callback, representing the continuation of the computation on that
+socket.
+
+Building a network service with a callback-oriented concurrency system
+means breaking the program into little chunks that can run without
+blocking.  Whereever a program could block, instead of just continuing
+the program, you register a callback.  Unfortunately this requirement
+permeates the program, from top to bottom: you always pay the mental
+cost of inverting your program's control flow by turning it into
+callbacks, and you always incur run-time cost of closure creation,
+even when the particular I/O could proceed without blocking.  It's a
+somewhat galling requirement, given that this contortion is required
+of the programmer, but could be done by the compiler.  We Schemers
+demand better abstractions than manual, obligatory
+continuation-passing-style conversion.
+
+Callback-based systems also encourage unstructured concurrency, as in
+practice callbacks are not the only path for data and control flow in
+a system: usually there is mutable global state as well.  Without
+strong patterns and conventions, callback-based systems often exhibit
+bugs caused by concurrent reads and writes to global state.
+
+Some of the problems of callbacks can be mitigated by using
+``promises'' or other library-level abstractions; if you're a Haskell
+person, you can think of this as lifting all possibly-blocking
+operations into a monad.  If you're not a Haskeller, that's cool,
+neither am I!  But if your typey spidey senses are tingling, it's for
+good reason: with promises, your whole program has to be transformed
+to return promises-for-values instead of values anywhere it would
+block.
+
+An obvious solution to the control-flow problem of callbacks is to use
+threads.  In the most generic sense, a thread is a language feature
+which denotes an independent computation.  Threads are created by
+other threads, but fork off and run independently instead of returning
+to their caller.  In a system with threads, there is implicitly a
+scheduler somewhere that multiplexes the threads so that when one
+suspends, another can run.
+
+In practice, the concept of threads is often conflated with a
+particular implementation, @dfn{kernel threads}.  Kernel threads are
+very low-level abstractions that are provided by the operating system.
+The nice thing about kernel threads is that they can use any CPU that
+is the kernel knows about.  That's an important factor in today's
+computing landscape, where Moore's law seems to have ended and we are
+getting more cores instead of more gigahertz.
+
+However, as a building block for a highly concurrent system, kernel
+threads have a few important problems.
+
+One is that kernel threads simply aren't designed to be allocated in
+huge numbers, and instead are more optimized to run in a
+one-per-CPU-core fashion.  Their memory usage is relatively high for
+what should be a lightweight abstraction: some 10 kilobytes at least
+and often some megabytes, in the form of the thread's stack.  There
+are ongoing efforts to reduce this for some systems but we cannot
+expect wide deployment in the next 5 years, if ever.  Even in the best
+case, a hundred thousand kernel threads will take at least a gigabyte
+of memory, which seems a bit excessive for book-keeping overhead.
+
+Kernel threads can be a bit irritating to schedule, too: when one
+thread suspends, it's for a reason, and it can be that user-space
+knows a good next thread that should run.  However because kernel
+threads are scheduled in the kernel, it's rarely possible for the
+kernel to make informed decisions.  There are some ``user-mode
+scheduling'' facilities that are in development for some systems, but
+again only for some systems.
+
+The other significant problem is that building non-crashy systems on
+top of kernel threads is hard to do, not to mention ``correct''
+systems.  It's an embarrassing situation.  For one thing, the
+low-level synchronization primitives that are typically provided with
+kernel threads, mutexes and condition variables, are not composable.
+Also, as with callback-oriented concurrency, one thread can silently
+corrupt another via unstructured mutation of shared state.  It's worse
+with kernel threads, though: a kernel thread can be interrupted at any
+point, not just at I/O.  And though callback-oriented systems can
+theoretically operate on multiple CPUs at once, in practice they
+don't.  This restriction is sometimes touted as a benefit by
+proponents of callback-oriented systems, because in such a system, the
+callback invocations have a single, sequential order.  With multiple
+CPUs, this is not the case, as multiple threads can run at the same
+time, in parallel.
+
+Kernel threads can work.  The Java virtual machine does at least
+manage to prevent low-level memory corruption and to do so with high
+performance, but still, even Java-based systems that aim for maximum
+concurrency avoid using a thread per connection because threads use
+too much memory.
+
+In this context it's no wonder that there's a third strain of
+concurrency: shared-nothing message-passing systems like Erlang.
+Erlang isolates each thread (called @dfn{processes} in the Erlang
+world), giving each it its own heap and ``mailbox''.  Processes can
+spawn other processes, and the concurrency primitive is
+message-passing.  A process that tries receive a message from an empty
+mailbox will ``block'', from its perspective.  In the meantime the
+system will run other processes.  Message sends never block, oddly;
+instead, sending to a process with many messages pending makes it more
+likely that Erlang will pre-empt the sending process.  It's a strange
+tradeoff, but it makes sense when you realize that Erlang was designed
+for network transparency: the same message send/receive interface can
+be used to send messages to processes on remote machines as well.
+
+No network is truly transparent, however.  At the most basic level,
+the performance of network sends should be much slower than local
+sends.  Whereas a message sent to a remote process has to be written
+out byte-by-byte over the network, there is no need to copy immutable
+data within the same address space.  The complexity of a remote
+message send is O(n) in the size of the message, whereas a local
+immutable send is O(1).  This suggests that hiding the different
+complexities behind one operator is the wrong thing to do.  And
+indeed, given byte read and write operators over sockets, it's
+possible to implement remote message send and receive as a process
+that serializes and parses messages between a channel and a byte sink
+or source.  In this way we get cheap local channels, and network shims
+are under the programmer's control.  This is the approach that the Go
+language takes, and is the one we use in Guile.
+
+Channels and message send/receive is a great start, but it's not
+sufficient for all purposes.  At the minimum, a program should be able
+to wait for a message send or receive over multiple channels at once.
+Go supports receive over multiple channels via its @code{select}
+primitive, but there is a more general solution invented by Concurrent
+ML, which is an abstraction over messages.  In Concurrent ML, you can
+get an event directly from a channel; actually synchronizing on the
+reception of the event is a separate operation.  Together with a
+primitive to synchronize on one of a number of events, Concurrent ML
+allows programs to build @code{select} in user-space.  It looks like
+the right direction for Guile to go too.
+
+@section Fibers design
+
+In Fibers, the unit of computation is the @dfn{fiber}, a lightweight
+thread managed by Guile.  A fiber communicates with the world via
+normal Guile ports: @code{get-bytevector}, @code{put-string}, and all
+that.  Between themselves, fibers send and receive Scheme values over
+@dfn{channels}, lightweight queues.
+
+Whenever a fiber tries to read but no data is available, or tries to
+write but no data can be written, Guile will suspend the fiber and
+arrange for it to be resumed when the port or channel operation can
+proceed.  In the meantime, Guile will run other fibers.  When no fiber
+is runnable, Guile will use efficient system facilities to sleep until
+input or output can proceed.
+
+When a fiber would block, it suspends to the scheduler from the
+current thread.  The scheduler will arrange to re-start the fiber when
+the port or channel becomes readable or writable, as appropriate.  For
+ports, the scheduler adds the file descriptor associated with the port
+to an @code{epoll} set.  In either case, the scheduler remembers which
+fibers are waiting and for what, so that the user can inspect the
+state of their system.
+
+If no scheduler has been installed in the current thread, the fiber
+will... well, we don't know yet!  Either it blocks its thread, or it
+aborts.  We don't know.
+
+On the Scheme level, a fiber is a delimited continuation.  When a
+scheduler runs a fiber, it does so within a prompt; when the fiber
+suspends, it suspends to the prompt.  The scheduler saves the
+resulting continuation as part of the fiber's state.  In this way the
+per-fiber computational state overhead is just the size of the pending
+stack frames of the fiber, which can be just a handful of words.
+
+Currently fibers are pinned to the kernel thread in which they are
+created.  We should probably implement some kind of work-stealing
+behavior so that if you choose to devote multiple CPU cores to
+servicing fibers, that they can share the workload.
+
+Ports are how fibers communicate with the world; channels are how
+fibers communicate with each other.  When a channel is created, it is
+created with a maximum number of enqueued messages (by default one).
+Sending to a channel with space in the queue will not suspend the
+calling thread.  A fiber that tries to write to a full queue or read
+from a channel with an empty queue will add itself to a list of
+``waiters'' for the channel and suspend itself to the scheduler.  A
+read from a full queue or a write to an empty queue will unblock
+waiters on a channel.
+
+Unlike Erlang channels, channels in Fiber are purely local and do not
+attempt to provide the illusion of network transparency.  This does
+have the positive advantage that we are able to provide better
+backpressure support than Erlang, blocking when a channels's queue is
+full instead of letting the sender keep sending many messages.
+
+On the other hand, currently fibers are not preemptively scheduled.  A
+fiber will only suspend when it would block on channel receive or
+send, or on read or write on a port.  This would be an OK point in the
+design space if only one kernel thread could be running fibers at
+once, as in Node.js.  However given that this is not the case, Fibers
+does not have many of the concurrency invariants that such systems
+enjoy, so perhaps we should support preemption in the future.
+
+To avoid starvation, a fiber can only run once within a ``turn''.
+Each turn starts with a poll on file descriptors of interest and marks
+the associated fibers as runnable.  If no fiber is runnable at the
+start of the poll, the poll call will ask the kernel to wait for a
+runnable descriptor.  Otherwise the poll call will ask the kernel to
+return immediately.  There is an additional FD added to the poll set
+that is used to interrupt a blocking poll, for example if a fiber
+becomes runnable due to I/O on a channel from a separate kernel thread
+while the first scheduler was still polling.
+
+To enable expressive cross-kernel-thread communications, channel sends
+and receives are atomic and thread-safe.
+
+To start scheduling fibers, user code will typically create a
+scheduler, instate it on the thread, add some fibers, then run the
+scheduler.  That call to run the scheduler will only return when there
+there are no more fibers waiting to be scheduled.
+
+@c @node Concept Index
+@c @unnumbered Concept Index
+@c @printindex cp
+@c @node Function Index
+@c @unnumbered Function Index
+@c @printindex fn
+
+@bye

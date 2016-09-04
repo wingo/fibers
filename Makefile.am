@@ -22,6 +22,8 @@ include build-aux/guile.am
 moddir=$(prefix)/share/guile/site/$(GUILE_EFFECTIVE_VERSION)
 godir=$(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/ccache
 
+info_TEXINFOS=fibers.texi
+
 SOURCES = \
 	fibers/epoll.scm \
 	fibers.scm \
