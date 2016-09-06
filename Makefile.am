@@ -26,6 +26,7 @@ info_TEXINFOS=fibers.texi
 
 SOURCES = \
 	fibers/epoll.scm \
+	fibers/channels.scm \
 	fibers.scm \
 	web/server/fibers.scm
 

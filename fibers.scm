@@ -193,6 +193,11 @@
   ((abort-to-prompt (scheduler-prompt-tag (current-scheduler))
                     after-suspend)))
 
+;; FIXME: `resume' should get scheduler from fiber, and if it's not
+;; the current scheduler it should add to the remote scheduler's
+;; landing pad, an atomic queue that is processed by the remote
+;; scheduler at its leisure.
+
 (define* (resume fiber thunk #:optional (ctx (ensure-current-scheduler)))
   (let* ((cont (fiber-data fiber))
          (thunk (lambda () (cont thunk))))
