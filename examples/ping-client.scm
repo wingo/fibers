@@ -28,12 +28,6 @@
   (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
   (setvbuf port 'block 1024))
 
-(define (server-error port msg . args)
-  (apply format (current-error-port) msg args)
-  (newline (current-error-port))
-  (close-port port)
-  (suspend))
-
 (define (connect-to-server addrinfo)
   (let ((port (socket (addrinfo:fam addrinfo)
                       (addrinfo:socktype addrinfo)
@@ -57,7 +51,8 @@
         (force-output port)
         (let ((response (read-line port)))
           (unless (equal? test response)
-            (server-error port "Bad response: ~A (expected ~A)" response test))
+            (close-port port)
+            (error "Bad response: ~A (expected ~A)" response test))
           (lp (1+ m)))))
     (close-port port))
   (set! *active-clients* (1- *active-clients*))
@@ -70,10 +65,11 @@
   (let ((addrinfo (car (getaddrinfo "localhost" (number->string 11211)))))
     (let lp ((n 0))
       (when (< n num-clients)
-        (spawn
+        (spawn-fiber
          (lambda ()
            (client-loop addrinfo n num-connections)))
-        (lp (1+ n)))))
-  (run))
+        (lp (1+ n))))))
 
-(apply run-ping-test (map string->number (cdr (program-arguments))))
+(run-fibers
+ (lambda ()
+   (apply run-ping-test (map string->number (cdr (program-arguments))))))

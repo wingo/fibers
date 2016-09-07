@@ -34,7 +34,12 @@
   #:use-module (ice-9 binary-ports)
   #:use-module (ice-9 suspendable-ports)
   #:use-module (ice-9 match)
-  #:use-module (fibers))
+  #:use-module (fibers)
+  #:use-module ((fibers internal)
+                #:select (make-scheduler
+                          destroy-scheduler
+                          suspend-current-fiber
+                          resume-fiber)))
 
 (define (set-nonblocking! port)
   (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
@@ -71,9 +76,9 @@
   (listen socket 1024)
   (set-nonblocking! socket)
   (sigaction SIGPIPE SIG_IGN)
-  (let* ((ctx (make-scheduler))
-         (server (make-server ctx (make-prompt-tag "have-request"))))
-    (spawn (lambda () (socket-loop server socket)) ctx)
+  (let* ((sched (make-scheduler))
+         (server (make-server sched (make-prompt-tag "have-request"))))
+    (spawn-fiber (lambda () (socket-loop server socket)) sched)
     server))
 
 (define (bad-request msg . args)
@@ -104,8 +109,8 @@
                   (lambda ()
                     (let* ((request (read-request client))
                            (body (read-request-body request)))
-                      (suspend
-                       (lambda (ctx fiber)
+                      (suspend-current-fiber
+                       (lambda (fiber)
                          (have-request fiber request body)))))
                   (lambda (key . args)
                     (display "While reading request:\n" (current-error-port))
@@ -144,7 +149,7 @@
        ;; TCP_NODELAY is not defined on this platform.
        (false-if-exception
         (setsockopt client IPPROTO_TCP TCP_NODELAY 0))
-       (spawn (lambda () (client-loop client have-request)))
+       (spawn-fiber (lambda () (client-loop client have-request)))
        (loop)))))
 
 ;; -> (client request body | #f #f #f)
@@ -152,13 +157,15 @@
   (call-with-prompt
    (server-have-request-prompt server)
    (lambda ()
-     (run (server-scheduler server)))
+     (run-fibers #:scheduler (server-scheduler server)
+                 #:install-suspendable-ports? #f
+                 #:keep-scheduler? #t))
    (lambda (k client request body)
      (values client request body))))
 
 ;; -> 0 values
 (define (server-write server client response body)
-  (resume client (lambda () (values response body)) (server-scheduler server))
+  (resume-fiber client (lambda () (values response body)))
   (values))
 
 ;; -> unspecified values

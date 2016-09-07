@@ -56,7 +56,7 @@
        (set-nonblocking! client)
        ;; Disable Nagle's algorithm.  We buffer ourselves.
        (setsockopt client IPPROTO_TCP TCP_NODELAY 0)
-       (spawn (lambda () (client-loop client addr store)))
+       (spawn-fiber (lambda () (client-loop client addr store)))
        (loop)))))
 
 (define* (run-ping-server #:key
@@ -69,9 +69,6 @@
                           (socket (make-default-socket family addr port)))
   (listen socket 1024)
   (sigaction SIGPIPE SIG_IGN)
-  (spawn
-   (lambda ()
-     (socket-loop socket (make-hash-table))))
-  (run))
+  (socket-loop socket (make-hash-table)))
 
-(run-ping-server)
+(run-fibers run-ping-server)

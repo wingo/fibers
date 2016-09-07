@@ -22,12 +22,11 @@
   #:use-module (srfi srfi-9 gnu)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
-  #:use-module (fibers) ;; fixme, eliminate cycle
+  #:use-module (fibers internal)
   #:export (channel?
             make-channel
             put-message
             get-message))
-
 
 
 (define-record-type <read-wait-queue>
@@ -74,17 +73,18 @@
               (commit (append old-state (list message)) values)
               (commit (make-write-wait-queue old-state (list (current-fiber)))
                       (lambda ()
-                        (suspend)
+                        (suspend-current-fiber)
                         (retry (atomic-box-ref state))))))
          (($ <read-wait-queue> waiters)
           (commit (list message)
                   (lambda ()
-                    (for-each (lambda (fiber) (resume fiber values)) waiters)
+                    (for-each (lambda (fiber) (resume-fiber fiber values))
+                              waiters)
                     (values))))
          (($ <write-wait-queue> messages waiters)
           (commit (make-write-wait-queue messages (cons (current-fiber) waiters))
                   (lambda ()
-                    (suspend)
+                    (suspend-current-fiber)
                     (retry (atomic-box-ref state))))))))))
 
 (define (get-message channel)
@@ -98,17 +98,18 @@
          (()
           (commit (make-read-wait-queue (list (current-fiber)))
                   (lambda ()
-                    (suspend)
+                    (suspend-current-fiber)
                     (retry (atomic-box-ref state)))))
          ((message . messages)
           (commit messages (lambda () message)))
          (($ <read-wait-queue> waiters)
           (commit (make-read-wait-queue (cons (current-fiber) waiters))
                   (lambda ()
-                    (suspend)
+                    (suspend-current-fiber)
                     (retry (atomic-box-ref state)))))
          (($ <write-wait-queue> (message . messages) waiters)
           (commit messages
                   (lambda ()
-                    (for-each (lambda (fiber) (resume fiber values)) waiters)
+                    (for-each (lambda (fiber) (resume-fiber fiber values))
+                              waiters)
                     message))))))))

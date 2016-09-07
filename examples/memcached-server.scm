@@ -37,10 +37,8 @@
     sock))
 
 (define (client-error port msg . args)
-  (put-string port (apply format #f msg args))
-  (put-string port "\r\n")
   (close-port port)
-  (suspend))
+  (apply error msg args))
 
 (define (parse-int port val)
   (let ((num (string->number val)))
@@ -130,7 +128,8 @@
        (set-nonblocking! client)
        ;; Disable Nagle's algorithm.  We buffer ourselves.
        (setsockopt client IPPROTO_TCP TCP_NODELAY 0)
-       (spawn (lambda () (client-loop client addr store)))
+       (spawn-fiber
+        (lambda () (client-loop client addr store)))
        (loop)))))
 
 (define* (run-memcached #:key
@@ -143,9 +142,6 @@
                         (socket (make-default-socket family addr port)))
   (listen socket 128)
   (sigaction SIGPIPE SIG_IGN)
-  (spawn
-   (lambda ()
-     (socket-loop socket (make-hash-table))))
-  (run))
+  (socket-loop socket (make-hash-table)))
 
-(run-memcached)
+(run-fibers run-memcached)

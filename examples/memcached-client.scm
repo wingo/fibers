@@ -29,10 +29,8 @@
   (setvbuf port 'block 1024))
 
 (define (server-error port msg . args)
-  (apply format (current-error-port) msg args)
-  (newline (current-error-port))
   (close-port port)
-  (suspend))
+  (apply error msg args))
 
 (define (parse-int port val)
   (let ((num (string->number val)))
@@ -139,10 +137,11 @@
   (let ((addrinfo (car (getaddrinfo "localhost" (number->string 11211)))))
     (let lp ((n 0))
       (when (< n num-clients)
-        (spawn
+        (spawn-fiber
          (lambda ()
            (client-loop addrinfo n num-connections)))
-        (lp (1+ n)))))
-  (run))
+        (lp (1+ n))))))
 
-(apply run-memcached-test (map string->number (cdr (program-arguments))))
+(run-fibers
+ (lambda ()
+   (apply run-memcached-test (map string->number (cdr (program-arguments))))))

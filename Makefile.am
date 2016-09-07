@@ -25,9 +25,10 @@ godir=$(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/ccache
 info_TEXINFOS=fibers.texi
 
 SOURCES = \
-	fibers/epoll.scm \
-	fibers/channels.scm \
 	fibers.scm \
+	fibers/channels.scm \
+	fibers/epoll.scm \
+	fibers/internal.scm \
 	web/server/fibers.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
