@@ -21,6 +21,9 @@
   #:use-module ((srfi srfi-1) #:select (append-reverse!))
   #:use-module (srfi srfi-9)
   #:use-module (fibers epoll)
+  #:use-module (ice-9 atomic)
+  #:use-module ((ice-9 control) #:select (let/ec))
+  #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
   #:use-module (ice-9 fdes-finalizers)
   #:use-module (ice-9 match)
   #:use-module (ice-9 suspendable-ports)
@@ -43,7 +46,8 @@
             resume-fiber))
 
 (define-record-type <scheduler>
-  (%make-scheduler epfd prompt-tag runnables sources sleepers)
+  (%make-scheduler epfd prompt-tag runnables sources sleepers
+                   inbox inbox-state wake-pipe)
   nio?
   (epfd scheduler-epfd)
   (prompt-tag scheduler-prompt-tag)
@@ -52,8 +56,15 @@
   ;; fd -> ((total-events . min-expiry) #(events expiry fiber) ...)
   (sources scheduler-sources)
   ;; ((fiber . expiry) ...)
-  (sleepers scheduler-sleepers set-scheduler-sleepers!))
+  (sleepers scheduler-sleepers set-scheduler-sleepers!)
+  ;; atomic box of (fiber ...)
+  (inbox scheduler-inbox)
+  ;; atomic box of either 'will-check, 'needs-wake or 'dead
+  (inbox-state scheduler-inbox-state)
+  ;; (read-pipe . write-pipe)
+  (wake-pipe scheduler-wake-pipe))
 
+;; fixme: prevent fibers from running multiple times in a turn
 (define-record-type <fiber>
   (make-fiber state scheduler data)
   fiber?
@@ -66,9 +77,28 @@
   ;; for suspended, a continuation; for finished, a list of values.
   (data fiber-data set-fiber-data!))
 
+(define (make-wake-pipe)
+  (define (set-nonblocking! port)
+    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL))))
+  (let ((pair (pipe)))
+    (match pair
+      ((read-pipe . write-pipe)
+       (setvbuf write-pipe 'none)
+       (set-nonblocking! read-pipe)
+       (set-nonblocking! write-pipe)
+       pair))))
+
+;; FIXME: Perhaps epoll should handle the wake pipe business itself
 (define (make-scheduler)
-  (%make-scheduler (epoll-create) (make-prompt-tag "fibers")
-                  '() (make-hash-table) '()))
+  (let ((epfd (epoll-create))
+        (wake-pipe (make-wake-pipe)))
+    (match wake-pipe
+      ((read-pipe . _)
+       (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
+    (%make-scheduler epfd (make-prompt-tag "fibers")
+                     '() (make-hash-table) '()
+                     (make-atomic-box '()) (make-atomic-box 'will-check)
+                     wake-pipe)))
 
 (define current-scheduler (make-parameter #f))
 (define (make-source events expiry fiber) (vector events expiry fiber))
@@ -78,71 +108,132 @@
 
 (define current-fiber (make-parameter #f))
 
-(define (schedule-fiber! sched fiber thunk)
-  (when (eq? (fiber-state fiber) 'suspended)
-    (set-fiber-state! fiber 'runnable)
-    (set-fiber-data! fiber thunk)
-    (let ((runnables (scheduler-runnables sched)))
-      (set-scheduler-runnables! sched (cons fiber runnables)))))
+(define (atomic-box-prepend! box x)
+  (let lp ((tail (atomic-box-ref box)))
+    (let ((tail* (atomic-box-compare-and-swap! box tail (cons x tail))))
+      (unless (eq? tail tail*)
+        (lp tail*)))))
+
+(define (wake-remote-scheduler! sched)
+  (match (scheduler-wake-pipe sched)
+    ((_ . write-pipe)
+     (let/ec cancel
+       (parameterize ((current-write-waiter cancel))
+         (put-u8 write-pipe #x00))))))
+
+(define (schedule-fiber! fiber thunk)
+  (let ((sched (fiber-scheduler fiber)))
+    (define (schedule/local)
+      (when (eq? (fiber-state fiber) 'suspended)
+        (set-fiber-state! fiber 'runnable)
+        (set-fiber-data! fiber thunk)
+        (let ((runnables (scheduler-runnables sched)))
+          (set-scheduler-runnables! sched (cons fiber runnables)))))
+    (define (schedule/remote)
+      (atomic-box-prepend! (scheduler-inbox sched) (cons fiber thunk))
+      (match (atomic-box-ref (scheduler-inbox-state sched))
+        ;; It is always correct to wake the scheduler via the pipe.
+        ;; However we can avoid it if the scheduler is guaranteed to
+        ;; see that the inbox is not empty before it goes to poll next
+        ;; time.
+        ('will-check #t)
+        ('needs-wake (wake-remote-scheduler! sched))
+        ('dead (error "Scheduler is dead"))))
+    (if (eq? sched (current-scheduler))
+        (schedule/local)
+        (schedule/remote))
+    (values)))
 
 (define internal-time-units-per-millisecond
   (/ internal-time-units-per-second 1000))
 
 (define (schedule-fibers-for-fd fd revents sched)
-  (let ((sources (hashv-ref (scheduler-sources sched) fd)))
-    (for-each (lambda (source)
-                ;; FIXME: If we were waiting with a timeout, this
-                ;; fiber might still be in "sleepers", and we should
-                ;; probably remove it.  Currently we don't do timed
-                ;; waits though, only sleeps.
-                (unless (zero? (logand revents
-                                       (logior (source-events source) EPOLLERR)))
-                  (resume-fiber (source-fiber source) (lambda () revents))))
-              (cdr sources))
-    (cond
-     ((zero? (logand revents EPOLLERR))
-      (hashv-remove! (scheduler-sources sched) fd)
-      (epoll-remove! (scheduler-epfd sched) fd))
-     (else
-      (set-cdr! sources '())
-      ;; Reset active events and expiration time, respectively.
-      (set-car! (car sources) #f)
-      (set-cdr! (car sources) #f)))))
+  (match (hashv-ref (scheduler-sources sched) fd)
+    (#f
+     (match (scheduler-wake-pipe sched)
+       ((read-pipe . _)
+        (cond
+         ((eqv? fd (fileno read-pipe))
+          ;; Slurp off any wake bytes from the fd.
+          (let/ec cancel
+            (parameterize ((current-write-waiter cancel))
+              (let lp () (get-u8 read-pipe) (lp)))))
+         (else
+          (warn "scheduler for unknown fd" fd))))))
+    (sources
+     (for-each (lambda (source)
+                 ;; FIXME: If we were waiting with a timeout, this
+                 ;; fiber might still be in "sleepers", and we should
+                 ;; probably remove it.  Currently we don't do timed
+                 ;; waits though, only sleeps.
+                 (unless (zero? (logand revents
+                                        (logior (source-events source) EPOLLERR)))
+                   (resume-fiber (source-fiber source) (lambda () revents))))
+               (cdr sources))
+     (cond
+      ((zero? (logand revents EPOLLERR))
+       (hashv-remove! (scheduler-sources sched) fd)
+       (epoll-remove! (scheduler-epfd sched) fd))
+      (else
+       (set-cdr! sources '())
+       ;; Reset active events and expiration time, respectively.
+       (set-car! (car sources) #f)
+       (set-cdr! (car sources) #f))))))
+
+(define (scheduler-poll-timeout sched)
+  (match (atomic-box-ref (scheduler-inbox sched))
+    ((_ . _)
+     ;; There are pending requests in our inbox, so we don't need to
+     ;; sleep at all.
+     0)
+    (()
+     (match (scheduler-sleepers sched)
+       ;; The sleepers list is sorted so the first element
+       ;; should be the one whose wake time is soonest.
+       (((fiber . expiry) . sleepers)
+        (let ((now (get-internal-real-time)))
+          (if (< expiry now)
+              0
+              (round/ (- expiry now)
+                      internal-time-units-per-millisecond))))
+       (_ -1)))))
+
+(define (wake-sleepers sched)
+  (let ((now (get-internal-real-time)))
+    ;; Resume fibers whose sleep has timed out.  Do it in such a way
+    ;; that the one with the earliest expiry is resumed last, so
+    ;; that it will will end up first on the runnable list.  If one
+    ;; of these fibers has already been resumed (perhaps because the
+    ;; fd is readable or writable), this resume will have no effect.
+    (let wake-sleepers ((sleepers (scheduler-sleepers sched)) (wakers '()))
+      (if (and (pair? sleepers) (>= now (cdar sleepers)))
+          (wake-sleepers (cdr sleepers) (cons (caar sleepers) wakers))
+          (begin
+            (set-scheduler-sleepers! sched sleepers)
+            (for-each (lambda (fiber)
+                        (resume-fiber fiber (lambda () 0)))
+                      wakers))))))
+
+(define (handle-inbox sched)
+  (for-each (match-lambda
+              ((fiber . thunk)
+               (resume-fiber fiber thunk)))
+            (atomic-box-swap! (scheduler-inbox sched) '())))
 
 (define (poll-for-events sched)
   ;; Called when the runnables list is empty.  Poll for some active
   ;; FD's and schedule their corresponding fibers.  Also schedule any
   ;; sleepers that have timed out.
-  (let ((sleepers (scheduler-sleepers sched)))
-    (epoll (scheduler-epfd sched)
-           32                           ; maxevents
-           (match sleepers
-             ;; The sleepers list is sorted so the first element
-             ;; should be the one whose wake time is soonest.
-             (((fiber . expiry) . sleepers)
-              (let ((now (get-internal-real-time)))
-                (if (< expiry now)
-                    0
-                    (round/ (- expiry now)
-                            internal-time-units-per-millisecond))))
-             (_ -1))
-           #:folder (lambda (fd revents seed)
-                      (schedule-fibers-for-fd fd revents sched)
-                      seed))
-    (let ((now (get-internal-real-time)))
-      ;; Resume fibers whose sleep has timed out.  Do it in such a way
-      ;; that the one with the earliest expiry is resumed last, so
-      ;; that it will will end up first on the runnable list.  If one
-      ;; of these fibers has already been resumed (perhaps because the
-      ;; fd is readable or writable), this resume will have no effect.
-      (let wake-sleepers ((sleepers sleepers) (wakers '()))
-        (if (and (pair? sleepers) (>= now (cdar sleepers)))
-            (wake-sleepers (cdr sleepers) (cons (caar sleepers) wakers))
-            (begin
-              (set-scheduler-sleepers! sched sleepers)
-              (for-each (lambda (fiber)
-                          (resume-fiber fiber (lambda () 0)))
-                        wakers)))))))
+  (atomic-box-set! (scheduler-inbox-state sched) 'needs-wake)
+  (epoll (scheduler-epfd sched)
+         32                           ; maxevents
+         (scheduler-poll-timeout sched)
+         #:folder (lambda (fd revents seed)
+                    (schedule-fibers-for-fd fd revents sched)
+                    seed))
+  (atomic-box-set! (scheduler-inbox-state sched) 'will-check)
+  (handle-inbox sched)
+  (wake-sleepers sched))
 
 (define* (run-fiber sched fiber)
   (when (eq? (fiber-state fiber) 'runnable)
@@ -177,17 +268,22 @@
 (define (destroy-scheduler sched)
   #;
   (for-each kill-fiber (list-copy (scheduler-fibers sched)))
+  (atomic-box-set! (scheduler-inbox-state sched) 'dead)
+  (match (scheduler-wake-pipe sched)
+    ((read-pipe . write-pipe)
+     (close-port read-pipe)
+     ;; FIXME: ignore errors flushing output
+     (close-port write-pipe)))
   (epoll-destroy (scheduler-epfd sched)))
 
 (define (create-fiber sched thunk)
   (let ((fiber (make-fiber 'suspended sched #f)))
-    (schedule-fiber! sched
-                      fiber
-                      (lambda ()
-                        (call-with-values thunk
-                          (lambda results
-                            (set-fiber-state! fiber 'finished)
-                            (set-fiber-data! fiber results)))))
+    (schedule-fiber! fiber
+                     (lambda ()
+                       (call-with-values thunk
+                         (lambda results
+                           (set-fiber-state! fiber 'finished)
+                           (set-fiber-data! fiber results)))))
     fiber))
 
 (define (kill-fiber fiber)
@@ -202,15 +298,10 @@
   ((abort-to-prompt (scheduler-prompt-tag (current-scheduler))
                     after-suspend)))
 
-;; FIXME: `resume' should get scheduler from fiber, and if it's not
-;; the current scheduler it should add to the remote scheduler's
-;; landing pad, an atomic queue that is processed by the remote
-;; scheduler at its leisure.
-
 (define* (resume-fiber fiber thunk)
   (let* ((cont (fiber-data fiber))
          (thunk (lambda () (cont thunk))))
-    (schedule-fiber! (fiber-scheduler fiber) fiber thunk)))
+    (schedule-fiber! fiber thunk)))
 
 (define (finalize-fd ctx fd)
   "Remove data associated with @var{fd} from the scheduler @var{ctx}.
