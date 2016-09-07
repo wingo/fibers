@@ -18,13 +18,10 @@
 ;;;; 
 
 (define-module (fibers)
-  #:use-module ((srfi srfi-1) #:select (append-reverse!))
-  #:use-module (srfi srfi-9)
   #:use-module (fibers epoll)
   #:use-module (fibers internal)
-  #:use-module (ice-9 fdes-finalizers)
-  #:use-module (ice-9 match)
-  #:use-module (ice-9 ports internal)
+  #:use-module ((ice-9 ports internal)
+                #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
   #:export ((get-current-fiber . current-fiber)
             run-fibers
