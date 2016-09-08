@@ -109,10 +109,7 @@
     (connect port (addrinfo:addr addrinfo))
     port))
 
-(define *active-clients* 0)
-
 (define (client-loop addrinfo n num-connections)
-  (set! *active-clients* (1+ *active-clients*))
   (let ((port (connect-to-server addrinfo))
         (key (string-append "test-" (number->string n))))
     (let lp ((m 0))
@@ -126,10 +123,7 @@
             (unless (equal? (item-bv item) v)
               (server-error port "Bad response: ~A (expected ~A)" (item-bv item) v))
             (lp (1+ m))))))
-    (close-port port))
-  (set! *active-clients* (1- *active-clients*))
-  (when (zero? *active-clients*)
-    (exit 0)))
+    (close-port port)))
 
 (define (run-memcached-test num-clients num-connections)
   ;; The getaddrinfo call blocks, unfortunately.  Call it once before
