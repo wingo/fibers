@@ -211,14 +211,12 @@
     ;; that it will will end up first on the runnable list.  If one
     ;; of these fibers has already been resumed (perhaps because the
     ;; fd is readable or writable), this resume will have no effect.
-    (let wake-sleepers ((sleepers (scheduler-sleepers sched)) (wakers '()))
-      (if (and (pair? sleepers) (>= now (cdar sleepers)))
-          (wake-sleepers (cdr sleepers) (cons (caar sleepers) wakers))
-          (begin
-            (set-scheduler-sleepers! sched sleepers)
-            (for-each (lambda (fiber)
-                        (resume-fiber fiber (lambda () 0)))
-                      wakers))))))
+    (let wake-sleepers ((sleepers (scheduler-sleepers sched)))
+      (match sleepers
+        (((fiber . (? (lambda (expiry) (>= now expiry)))) . sleepers)
+         (wake-sleepers sleepers)
+         (resume-fiber fiber (lambda () 0)))
+        (_ (set-scheduler-sleepers! sched sleepers))))))
 
 (define (handle-inbox sched)
   (for-each (match-lambda
@@ -369,9 +367,12 @@ from a finalizer thread."
   (let ((waketime (+ (get-internal-real-time)
                      (inexact->exact
                       (round (* seconds internal-time-units-per-second))))))
-    (let lp ((head '()) (tail (scheduler-sleepers sched)))
-      (if (and (pair? tail) (> waketime (cdar tail)))
-          (lp (cons (car tail) head) (cdr tail))
-          (set-scheduler-sleepers!
-           sched
-           (append-reverse! head (acons fiber waketime tail)))))))
+    (set-scheduler-sleepers!
+     sched
+     (let lp ((sleepers (scheduler-sleepers sched)))
+       (match sleepers
+         (((and sleeper (_ . (? (lambda (expiry) (> waketime expiry)))))
+           . tail)
+          (set-cdr! sleepers (lp tail))
+          sleepers)
+         (_ (acons fiber waketime sleepers)))))))
