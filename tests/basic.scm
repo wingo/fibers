@@ -94,12 +94,6 @@
 (assert-run-fibers-terminates (spawn-fiber-chain 500000))
 (assert-run-fibers-terminates (spawn-fiber-chain 5000000))
 
-;; spawn deterministic number of fibers that halt -> stop
-
-;; spawn many fibers -> stop
-
-;; chain or tree of fibers -> stop
-
 ;; sleep wakeup order
 
 ;; fib using channels
