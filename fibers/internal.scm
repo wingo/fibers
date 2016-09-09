@@ -21,6 +21,7 @@
   #:use-module ((srfi srfi-1) #:select (append-reverse!))
   #:use-module (srfi srfi-9)
   #:use-module (fibers epoll)
+  #:use-module (fibers psq)
   #:use-module (ice-9 atomic)
   #:use-module ((ice-9 control) #:select (let/ec))
   #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
@@ -56,7 +57,7 @@
   (runnables scheduler-runnables set-scheduler-runnables!)
   ;; fd -> ((total-events . min-expiry) #(events expiry fiber) ...)
   (sources scheduler-sources)
-  ;; ((fiber . expiry) ...)
+  ;; PSQ of fiber -> expiry
   (sleepers scheduler-sleepers set-scheduler-sleepers!)
   ;; atomic box of (fiber ...)
   (inbox scheduler-inbox)
@@ -97,7 +98,11 @@
       ((read-pipe . _)
        (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
     (%make-scheduler epfd 0 (make-prompt-tag "fibers")
-                     '() (make-hash-table) '()
+                     '() (make-hash-table)
+                     ;; sleepers psq
+                     (make-psq (match-lambda*
+                                 (((t1 . f1) (t2 . f2)) (< t1 t2)))
+                               <)
                      (make-atomic-box '()) (make-atomic-box 'will-check)
                      wake-pipe)))
 
@@ -192,31 +197,35 @@
    ((not (null? (scheduler-runnables sched)))
     ;; Likewise, don't sleep if there are runnables scheduled already.
     0)
+   ((psq-empty? (scheduler-sleepers sched))
+    -1)
    (else
-    (match (scheduler-sleepers sched)
-      ;; The sleepers list is sorted so the first element
-      ;; should be the one whose wake time is soonest.
-      (((fiber . expiry) . sleepers)
+    (match (psq-min (scheduler-sleepers sched))
+      ((expiry . fiber)
        (let ((now (get-internal-real-time)))
          (if (< expiry now)
              0
              (round/ (- expiry now)
-                     internal-time-units-per-millisecond))))
-      (_ -1)))))
+                     internal-time-units-per-millisecond))))))))
 
 (define (wake-sleepers sched)
+  ;; Resume fibers whose sleep has timed out.  Do it in such a way
+  ;; that the one with the earliest expiry is resumed last, so
+  ;; that it will will end up first on the runnable list.  If one
+  ;; of these fibers has already been resumed (perhaps because the
+  ;; fd is readable or writable), this resume will have no effect.
   (let ((now (get-internal-real-time)))
-    ;; Resume fibers whose sleep has timed out.  Do it in such a way
-    ;; that the one with the earliest expiry is resumed last, so
-    ;; that it will will end up first on the runnable list.  If one
-    ;; of these fibers has already been resumed (perhaps because the
-    ;; fd is readable or writable), this resume will have no effect.
     (let wake-sleepers ((sleepers (scheduler-sleepers sched)))
-      (match sleepers
-        (((fiber . (? (lambda (expiry) (>= now expiry)))) . sleepers)
-         (wake-sleepers sleepers)
-         (resume-fiber fiber (lambda () 0)))
-        (_ (set-scheduler-sleepers! sched sleepers))))))
+      (cond
+       ((or (psq-empty? sleepers)
+            (< now (car (psq-min sleepers))))
+        (set-scheduler-sleepers! sched sleepers))
+       (else
+        (call-with-values (lambda () (psq-pop sleepers))
+          (match-lambda*
+            (((_ . fiber) sleepers)
+             (wake-sleepers sleepers)
+             (resume-fiber fiber (lambda () 0))))))))))
 
 (define (handle-inbox sched)
   (for-each (match-lambda
@@ -267,7 +276,7 @@
       (if bool #t (return #f)))
     (only-finished-if (zero? (scheduler-active-fd-count sched)))
     (only-finished-if (null? (atomic-box-ref (scheduler-inbox sched))))
-    (only-finished-if (null? (scheduler-sleepers sched)))))
+    (only-finished-if (psq-empty? (scheduler-sleepers sched)))))
 
 (define (run-scheduler sched)
   (let lp ()
@@ -369,6 +378,8 @@ from a finalizer thread."
                       (round (* seconds internal-time-units-per-second))))))
     (set-scheduler-sleepers!
      sched
+     (psq-set (scheduler-sleepers sched) (cons waketime fiber) waketime)
+     #;
      (let lp ((sleepers (scheduler-sleepers sched)))
        (match sleepers
          (((and sleeper (_ . (? (lambda (expiry) (> waketime expiry)))))
