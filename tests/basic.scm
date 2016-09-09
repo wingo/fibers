@@ -94,6 +94,28 @@
 (assert-run-fibers-terminates (spawn-fiber-chain 500000))
 (assert-run-fibers-terminates (spawn-fiber-chain 5000000))
 
+(let ((run-order 0))
+  (define (test-run-order count)
+    (for-each (lambda (n)
+                (spawn-fiber
+                 (lambda ()
+                   (unless (eqv? run-order n)
+                     (error "bad run order" run-order n))
+                   (set! run-order (1+ n)))))
+              (iota count)))
+  (assert-run-fibers-terminates (test-run-order 10)))
+
+(let ((run-order 0))
+  (define (test-wakeup-order count)
+    (for-each (lambda (n)
+                (spawn-fiber
+                 (lambda ()
+                   (unless (eqv? run-order n)
+                     (error "bad run order" run-order n))
+                   (set! run-order (1+ n)))))
+              (iota count)))
+  (assert-run-fibers-terminates (test-wakeup-order 10)))
+
 ;; sleep wakeup order
 
 ;; fib using channels

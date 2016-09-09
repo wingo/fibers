@@ -243,6 +243,9 @@
   ;; their corresponding fibers.  Also schedule any sleepers that have
   ;; timed out, and process the inbox that receives
   ;; requests-to-schedule from remote threads.
+  ;;
+  ;; FIXME: use a deque instead
+  (set-scheduler-runnables! sched (reverse (scheduler-runnables sched)))
   (unless (zero? (scheduler-active-fd-count sched))
     (atomic-box-set! (scheduler-inbox-state sched) 'needs-wake)
     (epoll (scheduler-epfd sched)
