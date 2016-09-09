@@ -18,7 +18,8 @@
 ;;;;
 
 (define-module (tests basic)
-  #:use-module (fibers))
+  #:use-module (fibers)
+  #:use-module (srfi srfi-1))
 
 (define failed? #f)
 
@@ -95,6 +96,30 @@
 (assert-run-fibers-terminates (spawn-fiber-chain 5000000))
 
 ;; sleep wakeup order
+
+(define sleep-list-mtx (make-mutex))
+
+(define sleep-list '())
+
+(define (add-order n)
+  (lock-mutex sleep-list-mtx)
+  (set! sleep-list (cons n sleep-list))
+  (unlock-mutex sleep-list-mtx))
+
+(define *randstate* (random-state-from-platform))
+
+;; TODO(codemac): Curerntly this does not pass, as the "spawn time"
+;; for each sleep isn't actually taken into account here. Ideally we
+;; can make these sleeps small enough that the test goes quickly
+;; without actually drifting across when each spawn-fiber is called.
+(assert-run-fibers-terminates
+ (do-times
+  1000
+  (let* ((nr (random 100 *randstate*))
+	 (n  (exact->inexact (/ nr 1000))))
+    (spawn-fiber (lambda () (sleep n) (add-order n))))))
+
+(assert-equal (sort sleep-list <) (reverse sleep-list))
 
 ;; fib using channels
 
