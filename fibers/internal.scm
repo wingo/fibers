@@ -281,7 +281,7 @@
     (only-finished-if (null? (atomic-box-ref (scheduler-inbox sched))))
     (only-finished-if (psq-empty? (scheduler-sleepers sched)))))
 
-(define (run-scheduler sched)
+(define* (run-scheduler sched #:key join-fiber)
   (let lp ()
     (schedule-runnables-for-next-turn sched)
     (match (scheduler-runnables sched)
@@ -289,8 +289,11 @@
        ;; Could be the scheduler is stopping, or it could be that we
        ;; got a spurious wakeup.  In any case, this is the place to
        ;; check to see whether the scheduler is really done.
-       (unless (scheduler-finished? sched)
-         (lp)))
+       (cond
+        ((not (scheduler-finished? sched)) (lp))
+        ((not join-fiber) (values))
+        ((not (eq? (fiber-state join-fiber) 'finished)) (lp))
+        (else (apply values (fiber-data join-fiber)))))
       (runnables
        (set-scheduler-runnables! sched '())
        (for-each run-fiber runnables)

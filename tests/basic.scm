@@ -45,9 +45,17 @@
     (format #t "assert run-fibers on ~s terminates: " 'exp)
     (force-output)
     (let ((start (get-internal-real-time)))
-      (run-fibers (lambda () exp))
-      (format #t "ok (~a s)\n" (/ (- (get-internal-real-time) start)
-                                  1.0 internal-time-units-per-second)))))
+      (call-with-values (lambda () (run-fibers (lambda () exp)))
+        (lambda vals
+          (format #t "ok (~a s)\n" (/ (- (get-internal-real-time) start)
+                                      1.0 internal-time-units-per-second))
+          (apply values vals))))))
+
+(define-syntax-rule (assert-run-fibers-returns exp expected ...)
+  (begin
+    (call-with-values (lambda () (assert-run-fibers-terminates exp))
+      (lambda run-fiber-return-vals
+        (assert-equal '(expected ...) run-fiber-return-vals)))))
 
 (define-syntax-rule (do-times n exp)
   (let lp ((count n))
@@ -115,6 +123,8 @@
                    (set! run-order (1+ n)))))
               (iota count)))
   (assert-run-fibers-terminates (test-wakeup-order 10)))
+
+(assert-run-fibers-returns 1 1)
 
 ;; sleep wakeup order
 
