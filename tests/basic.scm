@@ -18,7 +18,8 @@
 ;;;;
 
 (define-module (tests basic)
-  #:use-module (fibers))
+  #:use-module (fibers)
+  #:use-module (fibers channels))
 
 (define failed? #f)
 
@@ -51,7 +52,7 @@
                                       1.0 internal-time-units-per-second))
           (apply values vals))))))
 
-(define-syntax-rule (assert-run-fibers-returns exp expected ...)
+(define-syntax-rule (assert-run-fibers-returns (expected ...) exp)
   (begin
     (call-with-values (lambda () (assert-run-fibers-terminates exp))
       (lambda run-fiber-return-vals
@@ -124,11 +125,21 @@
               (iota count)))
   (assert-run-fibers-terminates (test-wakeup-order 10)))
 
-(assert-run-fibers-returns 1 1)
+(assert-run-fibers-returns (1) 1)
 
-;; sleep wakeup order
+(define-syntax-rule (rpc exp)
+  (let ((ch (make-channel)))
+    (spawn-fiber (lambda () (put-message ch exp)))
+    (get-message ch)))
 
-;; fib using channels
+(assert-run-fibers-returns (1) (rpc 1))
+
+(define (rpc-fib n)
+  (rpc (if (< n 2)
+           1
+           (+ (rpc-fib (- n 1)) (rpc-fib (- n 2))))))
+
+(assert-run-fibers-returns (75025) (rpc-fib 24))
 
 ;; sleep durations
 
