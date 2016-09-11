@@ -25,7 +25,7 @@ shouldn't have a strong reference on fibers.
 
 But perhaps we can get around this; if we assign each fiber an ID that
 is a counter that increments from 0, then we can make a weak-value
-hash table from ID to fiber.  To determine the set of live fiber, we
+hash table from ID to fiber.  To determine the set of live fibers, we
 can probe each value in the table from 0 to the current next-fiber-id
 value.  If we cache this set, then next time we want the live fiber we
 can just re-probe the IDs from the last time, and then all values
@@ -55,11 +55,11 @@ How would this work, I wonder?  It's easy to get a backtrace because
 we have the suspended continuation for paused fibers, but you'd want
 to get the dynamic bindings too, methinks...
 
-# Priorities
+## Priorities
 
 Currently fibers have no priority.  Does that matter?
 
-# Fiber join
+## Fiber join
 
 First, spawn-fiber needs to return the new fiber, and we need to test
 that current-fiber works.  Then join-fiber on a not-finished fiber
@@ -71,7 +71,7 @@ them?  Are there other ways?  I suspect most fibers will not be joined
 and just GC'd when finished or stuck, so maybe a side table is the
 right solution.
 
-# Process death notifications
+## Process death notifications
 
 What if you are waiting on a channel but also want to get woken if the
 remote process dies?  Probably in this case `select()' over two
@@ -79,12 +79,12 @@ channels would be sufficient.  At the same time, something like what
 Concurrent ML does by making events first-class solves this problem
 nicely.
 
-# Documentation
+## Documentation
 
 The implementation is useful enough that its public interfaces should
 be documented :)
 
-# What if a fiber throws an exception?
+## What if a fiber throws an exception?
 
 In batch mode, probably the exception should be caught by the
 scheduler, the fiber marked as finished-with-exception, and the key
@@ -102,28 +102,28 @@ Finally there are also situations when you would like to enter a
 debugger.  I don't know what these situations are.  For that I guess
 we can see what kind of solution to make once `,fiber` is working.
 
-# Missing API
+## Missing API
 
 We need to provide API for things like:
-## What is the graph?
-## Who is keeping this file alive?
-## What fibers are there?
-## Can we detect deadlocks?
-## What fibers are taking the most time?  What is the total run-time of a given fiber?
-## total number of fibers ever created
-## total number of fibers that ever exited
+### What is the graph?
+### Who is keeping this file alive?
+### What fibers are there?
+### Can we detect deadlocks?
+### What fibers are taking the most time?  What is the total run-time of a given fiber?
+### total number of fibers ever created
+### total number of fibers that ever exited
 
-# When would we want to migrate a fiber to a different thread?
+## When would we want to migrate a fiber to a different thread?
 
 Also, how would we do it?
 
-# Prevent scheduler from being active in multiple threads at once
+## Prevent scheduler from being active in multiple threads at once
 
 A scheduler assumes that it can directly mutate some of its data
 structures, meaning that it should never run on multiple threads at
 once.
 
-# `select()` or similar
+## `select()` or similar
 
 We should certainly provide a `select-message` interface that returns
 the first readable message, along with the channel that it came from.
@@ -134,7 +134,7 @@ conclusion that we really need to look at Concurrent ML to see if we
 can integrate first-class events into fibers.  See also
 https://www.cs.utah.edu/plt/publications/pldi04-ff.pdf.
 
-# Readline?  REPL over channels
+## Readline?  REPL over channels
 
 Currently the REPL runs in a blocking mode that basically takes over
 the thread.  That would be fine if the REPL could suspend; can we find
@@ -144,11 +144,11 @@ will have to use kernel threads.  One REPL on a thread to interact
 with the user, and fibers run in other threads.  We need to package
 this up so that a user can have a nice experience.
 
-# Update HTTP lib to use suspendable operations
+## Update HTTP lib to use suspendable operations
 
 Change the HTTP library in Guile to always use suspendable operations
 instead of `display' et al.
 
-# Blog post!
+## Blog post!
 
 "lightweight concurrency in guile with fibers" or something.
