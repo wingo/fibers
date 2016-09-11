@@ -44,7 +44,9 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 
 @insertcopying
 @menu
-* Introduction::                     What's this all about?
+* Introduction::          What's this all about?
+* Reference::             API reference.
+* Status::                Fibers is a work in progress.
 @end menu
 
 @end ifnottex
@@ -58,6 +60,12 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 
 Fibers is a facility for lightweight concurrency in Guile.
 
+@menu
+* Context::               How do other systems handle concurrency?
+* Design::                Fibers' point in the design space.
+@end menu
+
+@node Context
 @section A brief history of language facilities for concurrency
 
 Modern machines have the raw capability to serve hundreds of thousands
@@ -208,6 +216,7 @@ primitive to synchronize on one of a number of events, Concurrent ML
 allows programs to build @code{select} in user-space.  It looks like
 the right direction for Guile to go too.
 
+@node Design
 @section Fibers design
 
 In Fibers, the unit of computation is the @dfn{fiber}, a lightweight
@@ -288,6 +297,13 @@ To start scheduling fibers, user code will typically create a
 scheduler, instate it on the thread, add some fibers, then run the
 scheduler.  That call to run the scheduler will only return when there
 there are no more fibers waiting to be scheduled.
+
+@node Reference
+@chapter API reference
+
+@node Status
+@chapter Project status
+
 
 @c @node Concept Index
 @c @unnumbered Concept Index
