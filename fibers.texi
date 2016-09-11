@@ -4,8 +4,8 @@
 @settitle Fibers
 @c %**end of header
 
-@set VERSION 0.1
-@set UPDATED 17 July 2016
+@set VERSION 0.2.0
+@set UPDATED 11 September 2016
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated
@@ -46,6 +46,7 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 @menu
 * Introduction::          What's this all about?
 * Reference::             API reference.
+* Pitfalls::              Stay on the happy path.
 * Status::                Fibers is a work in progress.
 @end menu
 
@@ -301,9 +302,277 @@ there are no more fibers waiting to be scheduled.
 @node Reference
 @chapter API reference
 
+Fibers is a library built on Guile, consisting of a public interface,
+a channels library, and an internals interface.
+
+@menu
+* Using Fibers::        User-facing interface to fibers
+* Channels::            Share memory by communicating.
+* Internals::           Scheduler and fiber objects and operations.
+@end menu
+
+@node Using Fibers
+@section Using Fibers
+
+The public interface of fibers right now is quite minimal.  To use it,
+import the @code{(fibers)} module:
+
+@example
+(use-modules (fibers))
+@end example
+
+To create a new fibers scheduler and run it in the current Guile
+thread, use @code{run-fibers}.
+
+@defun run-fibers [init-thunk=@code{#f}] [#:install-suspendable-ports?=@code{#t}] [#:scheduler=@code{(make-scheduler)}] [#:keep-scheduler?]
+Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
+until the scheduler has no more runnable fibers.  Return the value(s)
+returned by the call to @var{init-thunk}.
+
+For example:
+@example
+(run-fibers (lambda () 1)) @result{} 1
+(run-fibers
+ (lambda ()
+   (spawn-fiber (lambda () (display "hey!\n")))))
+  @print{} hey!
+  @result{} #<<fiber> ...>
+@end example
+
+Calling @code{run-fibers} will ensure that Guile's port implementation
+allows fibers to suspend if a read or a write on a port would block.
+@xref{Non-Blocking I/O,,,guile.info,Guile Reference Manual}, for more
+details on suspendable ports.  If for some reason you want port reads
+or writes to prevent other fibers from running, pass @code{#f} as the
+@code{#:install-suspendable-ports?} keyword argument.
+
+By default, @code{run-fibers} will create a fresh scheduler.  If you
+happen to have a pre-existing scheduler (because you are used the
+internals interface to create one), you can pass it to
+@code{run-fibers} using the @code{#:scheduler} keyword argument.
+
+The scheduler will be destroyed when @code{run-fibers} finishes,
+unless the scheduler was already ``current'' (@pxref{Internals}).  If
+you need to keep the scheduler, either make sure it is current or
+explicitly pass @code{#t} as the @code{#:keep-scheduler?} keyword
+argument.
+@end defun
+
+@defun spawn-fiber thunk [#:scheduler=@code{(require-current-scheduler)}]
+Spawn a new fiber that will run @var{thunk}.  Return the new fiber.
+The new fiber will run concurrently with other fibers.
+
+The fiber will be added to the current scheduler, which is usually
+what you want.  It's also possible to spawn the fiber on a specific
+scheduler, which is useful to ensure that the fiber runs on a
+different kernel thread.  In that case, pass the @code{#:scheduler}
+keyword argument.
+
+Currently, fibers will only ever be run within the scheduler to which
+they are first added, which effectively pins them to a single kernel
+thread.  This limitation may be relaxed in the future.
+@end defun
+
+@defun current-fiber
+Return the current fiber, or @code{#f} if not called within the
+dynamic extent of a thunk passed to @code{spawn-fiber}.
+@end defun
+
+@defun sleep seconds
+Wake up the current fiber after @var{seconds} of wall-clock time have
+elapsed.  This definition will replace the binding for @code{sleep} in
+the importing module, effectively overriding Guile's ``core''
+definition.
+@end defun
+
+@node Channels
+@section Channels
+
+Channels are the way to communicate between fibers.  To use them, load
+the channels module:
+
+@example
+(use-modules (fibers channels))
+@end example
+
+@defun make-channel [#:queue-size=@code{1}]
+Create and return a fresh channel.  By default the channel will have
+space for one buffered message; pass a larger value as
+@code{#:queue-size} to increase the buffer size.
+@end defun
+
+@defun channel? obj
+Return @code{#t} if @var{obj} is a channel, and @code{#f} otherwise.
+@end defun
+
+@defun put-message channel message
+Send @var{message} on @var{channel}, and return zero values.  If
+@var{channel} is full (i.e., it already @var{queue-size} messages
+queued), block until some other fiber calls @code{get-message} on the
+channel.
+@end defun
+
+@defun get-message channel
+Receive a message from @var{channel}, and return zero values.  If
+@var{channel} is empty (i.e., there are no messages in its queue),
+block until some other fiber calls @code{put-message} on the channel.
+@end defun
+
+Channels are thread-safe; you can use them to send and receive values
+between fibers on different kernel threads.
+
+@node Internals
+@section Internals
+
+These internal interfaces are a bit dangerous, in the sense that if
+they are used wrongly, they can corrupt the state of your program.
+For example, the scheduler has some specific mechanisms to ensure
+thread-safety, and not all of the procedures in this module can be
+invoked on a scheduler from any thread.  We will document them at some
+point, but for now this section is a stub.
+
+@example
+(use-modules (fibers internal))
+@end example
+
+@defun make-scheduler
+@end defun
+
+@defvar current-scheduler
+@end defvar
+
+@defun run-scheduler sched [#:join-fiber]
+@end defun
+
+@defun destroy-scheduler sched
+@end defun
+
+@defun add-fd-events! sched fd events fiber
+@end defun
+
+@defun add-sleeper! sched fiber seconds
+@end defun
+
+@defun create-fiber sched thunk
+@end defun
+
+@defvar current-fiber
+@end defvar
+
+@defun kill-fiber fiber
+@end defun
+
+@defspec fiber-scheduler
+@end defspec
+
+@defspec fiber-state
+@end defspec
+
+@defun suspend-current-fiber [after-suspend]
+@end defun
+
+@defun resume-fiber fiber thunk
+@end defun
+
+
+@node Pitfalls
+@chapter Pitfalls
+
+Running Guile code within a fiber mostly ``just works''.  There are a
+couple of pitfalls to be aware of though.
+
+@menu
+* Blocking::            Avoid calling blocking operations.
+* Mutation::            Avoid unstructured mutation of shared data.
+@end menu
+
+@node Blocking
+@section Blocking
+
+When you run a program under fibers, the fibers library arranges to
+make it so that port operations can suspend the fiber instead of
+block.  This generally works, with some caveats.
+
+@enumerate
+@item
+The port type has to either never block, or support non-blocking I/O.
+Currently the only kind of port in Guile are file ports (including
+sockets), and for them this condition is fulfilled.  However notably
+non-blocking I/O is not supported for custom binary I/O ports, not yet
+anyway.  If you need this, get it fixed in Guile :)
+@item
+You have to make sure that any file port you operate on is opened in
+nonblocking mode.  @xref{Non-Blocking I/O,,,guile.info,Guile Reference
+Manual}, for the obscure @code{fcntl} incantation to use on your
+ports.
+@item
+You have to avoid any operation on ports that is not supported yet in
+Guile for non-blocking I/O.  Since non-blocking I/O is new in Guile,
+only some I/O operations are expressed in terms of the primitive
+operations.  Notably, Scheme @code{read}, @code{display}, and
+@code{write} are still implemented in C, which prevents any fiber that
+uses them from suspending and resuming correctly.  What will happen
+instead is that the call blocks instead of suspending.  If you find a
+situation like this, talk to Guile developers to get it fixed :)
+@item
+You can enable non-blocking I/O for local files, but Linux at least
+will always say that the local file is ready for I/O even if it has to
+page in data from a spinning-metal device.  This is a well-known
+limitation for which the solution is apparently to do local I/O via a
+thread pool.  We could implement this in Fibers, or in Guile... not
+sure what the right thing is!
+@end enumerate
+
+You also have to avoid any other library or system calls that would
+block.  One common source of blocking is @code{getaddrinfo} and
+related network address resolution library calls.  Again, apparently
+the solution is thread pools?  Probably in Fibers we should implement
+a thread-pooled address resolver.
+
+The @code{(fibers)} module exports a @code{sleep} replacement.  Code
+that sleeps should import the @code{(fibers)} module to be sure that
+they aren't using Guile's @code{sleep} function.
+
+Finally, a fiber itself has to avoid blocking other fibers; it must
+reach a ``yield point'' some time.  A yield point includes a read or
+write on a port or a channel that would block, or a @code{sleep}.
+Other than that, nothing will pre-empt a fiber, at least not
+currently.  If you need to yield to the scheduler, then at least do a
+@code{(sleep 0)} or something.
+
+@node Mutation
+@section Mutation
+
+Although code run within fibers looks like normal straight-up Scheme,
+it runs concurrently with other fibers.  This means that if you mutate
+shared state and other fibers mutate the same shared state using
+normal Scheme procedures like @code{set!}, @code{vector-set!}, or the
+like, then probably you're going to have a bad time.  Although
+currently fibers aren't scheduled pre-emptively, multi-step
+transactions may be suspended if your code reaches a yield point in
+the middle of performing the transaction.
+
+Likewise if you have multiple kernel threads running fiber schedulers,
+then it could indeed be that you have multiple fibers running in
+parallel.
+
+The best way around this problem is to avoid unstructured mutation,
+and to instead share data by communicating over channels.  Using
+channels to communicate data produces much more robust, safe systems.
+
+If you need to mutate global data, do so within a mutex.
+
 @node Status
 @chapter Project status
 
+It's early days.  At the time of this writing, no one uses fibers in
+production that we are aware of.  Should you be the first?  Well
+maybe, if you feel like you understand the implementation, are
+prepared to debug, and have some time on your hands.  Otherwise
+probably it's better to wait.
+
+See the @code{TODO.md} file in the repository for a current list of
+to-do items.
 
 @c @node Concept Index
 @c @unnumbered Concept Index
