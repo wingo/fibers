@@ -47,6 +47,8 @@ EXTRA_DIST += \
 	env.in \
 	HACKING \
         COPYING.LESSER \
+	README.md \
+	TODO.md \
 	$(bin_SCRIPTS) \
 	$(TESTS) \
 	examples
