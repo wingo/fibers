@@ -28,7 +28,6 @@
   #:use-module (ice-9 fdes-finalizers)
   #:use-module (ice-9 match)
   #:use-module (ice-9 suspendable-ports)
-  #:replace (sleep)
   #:export (;; Low-level interface: schedulers and threads.
             make-scheduler
             current-scheduler
