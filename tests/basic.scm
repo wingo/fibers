@@ -141,7 +141,19 @@
 
 (assert-run-fibers-returns (75025) (rpc-fib 24))
 
-;; sleep durations
+(define (check-sleep timeout)
+  (spawn-fiber (lambda ()
+                 (let ((start (get-internal-real-time)))
+                   (sleep timeout)
+                   (let ((elapsed (/ (- (get-internal-real-time) start)
+                                     1.0 internal-time-units-per-second)))
+                     (format #t "assert sleep ~as < actual ~as: ~a (diff: ~a%)\n"
+                             timeout elapsed (<= timeout elapsed)
+                             (* 100 (/ (- elapsed timeout) timeout)))
+                     (set! failed? (< elapsed timeout)))))))
+
+(assert-run-fibers-terminates
+ (do-times 20 (check-sleep (random 1.0))))
 
 ;; timed channel wait
 
