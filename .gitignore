@@ -26,3 +26,5 @@
 /epoll.la
 /epoll_la-epoll.lo
 *.go
+/fibers.info
+/build-aux/texinfo.tex
