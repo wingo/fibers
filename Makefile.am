@@ -41,7 +41,7 @@ epoll_la_LIBADD = $(GUILE_LIBS)
 epoll_la_LDFLAGS = -export-dynamic -module
 
 TESTS=tests/basic.scm
-TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env guile -s
+TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
 	env.in \
