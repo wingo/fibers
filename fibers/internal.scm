@@ -43,11 +43,26 @@
             fiber-scheduler
             fiber-state
 
+            fold-all-schedulers
+            scheduler-by-name
+            fold-all-fibers
+            fiber-by-name
+
             suspend-current-fiber
             resume-fiber))
 
 (define-once fibers-nameset (make-nameset))
 (define-once schedulers-nameset (make-nameset))
+
+(define (fold-all-schedulers f seed)
+  (nameset-fold f schedulers-nameset seed))
+(define (scheduler-by-name name)
+  (nameset-ref schedulers-nameset name))
+
+(define (fold-all-fibers f seed)
+  (nameset-fold f fibers-nameset seed))
+(define (fiber-by-name name)
+  (nameset-ref fibers-nameset name))
 
 (define-record-type <scheduler>
   (%make-scheduler epfd active-fd-count prompt-tag runnables

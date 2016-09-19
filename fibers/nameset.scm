@@ -24,6 +24,7 @@
   #:use-module (srfi srfi-26)
   #:export ((make-nameset/public . make-nameset)
             nameset-add!
+            nameset-ref
             nameset-fold))
 
 (define-syntax struct
@@ -63,6 +64,12 @@ name that was created."
   (let ((name (atomic-box-fetch-and-inc! (nameset-counter ns))))
     (hashv-set! (nameset-names ns) name obj)
     name))
+
+(define (nameset-ref ns name)
+  "Return the object named @var{name} in nameset @var{ns}, or
+@code{#f} if no such object has that name (perhaps because the object
+was reclaimed by the garbage collector)."
+  (hashv-ref (nameset-names ns) name))
 
 (define* (nameset-fold f ns seed)
   "Fold @var{f} over the objects contained in the nameset @var{ns}.

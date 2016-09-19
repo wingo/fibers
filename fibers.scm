@@ -20,6 +20,7 @@
 (define-module (fibers)
   #:use-module (fibers epoll)
   #:use-module (fibers internal)
+  #:use-module (fibers repl)
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
