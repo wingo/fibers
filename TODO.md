@@ -4,7 +4,7 @@ There's lots of stuff to do.
 
 ## REPL integration
 
-### ,fibers
+### Improve `,fibers`
 
 ```
 scheme@(guile-user)> ,fibers
@@ -18,23 +18,21 @@ fiber  state
 ...
 ```
 
-Currently we don't know the list of fibers or the set of channels in
-existence because we want to allow `(spawn-fiber (lambda ()
-(get-message (make-channel))))` to be GC'd, which means the scheduler
-shouldn't have a strong reference on fibers.
+Right now we just get "waiting", "finished", or the like.  Usefully
+representing what a thread is waiting on is tricky though.  Since this
+information is already present in the continuation, probably we should
+not include any additional fields in the `<fiber>' data type.  If you
+just give the file and the line, probably that file is in (fibers
+internal) somewhere; you could traverse the stack until you leave
+fibers files, but then there's the possibility that there's user-level
+abstractions like RPC wrappers that the user would like to skip as
+well.  A library should probably be able to hook into this
+pretty-printing process.  Probably it can be done in such a way that
+we can just mark certain return addresses as never interesting, and in
+that case cache that value so that the user code doesn't have to be
+very performant.
 
-But perhaps we can get around this; if we assign each fiber an ID that
-is a counter that increments from 0, then we can make a weak-value
-hash table from ID to fiber.  To determine the set of live fibers, we
-can probe each value in the table from 0 to the current next-fiber-id
-value.  If we cache this set, then next time we want the live fiber we
-can just re-probe the IDs from the last time, and then all values
-between the previous and current next-fiber-id values.
-
-Fibers should then gain a field indicating the event that they are
-waiting on.
-
-### ,fkill
+### `,fkill`
 ```
 scheme@(guile-user)> ,fkill 1
 ```
@@ -42,7 +40,7 @@ scheme@(guile-user)> ,fkill 1
 Also `,fcancel` I guess, the difference being that killing raises and
 exception and cancelling is like SIGKILL.
 
-### ,fiber N
+### `,fiber N`
 ```
 scheme@(guile-user)> ,fiber 2
 Pausing fiber 2 (was: sleeping for another 3.2s).
