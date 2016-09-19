@@ -30,6 +30,7 @@ SOURCES = \
 	fibers/epoll.scm \
 	fibers/internal.scm \
 	fibers/psq.scm \
+	fibers/nameset.scm \
 	web/server/fibers.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
