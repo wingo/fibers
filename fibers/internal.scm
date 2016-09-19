@@ -22,6 +22,7 @@
   #:use-module (srfi srfi-9)
   #:use-module (fibers epoll)
   #:use-module (fibers psq)
+  #:use-module (fibers nameset)
   #:use-module (ice-9 atomic)
   #:use-module ((ice-9 control) #:select (let/ec))
   #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
@@ -44,6 +45,9 @@
 
             suspend-current-fiber
             resume-fiber))
+
+(define-once fibers-nameset (make-nameset))
+(define-once schedulers-nameset (make-nameset))
 
 (define-record-type <scheduler>
   (%make-scheduler epfd active-fd-count prompt-tag runnables
@@ -92,18 +96,24 @@
 ;; FIXME: Perhaps epoll should handle the wake pipe business itself
 (define (make-scheduler)
   (let ((epfd (epoll-create))
+        (active-fd-count 0)
+        (prompt-tag (make-prompt-tag "fibers"))
+        (runnables '())
+        (sources (make-hash-table))
+        (sleepers (make-psq (match-lambda*
+                              (((t1 . f1) (t2 . f2)) (< t1 t2)))
+                            <))
+        (inbox (make-atomic-box '()))
+        (inbox-state (make-atomic-box 'will-check))
         (wake-pipe (make-wake-pipe)))
     (match wake-pipe
       ((read-pipe . _)
        (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
-    (%make-scheduler epfd 0 (make-prompt-tag "fibers")
-                     '() (make-hash-table)
-                     ;; sleepers psq
-                     (make-psq (match-lambda*
-                                 (((t1 . f1) (t2 . f2)) (< t1 t2)))
-                               <)
-                     (make-atomic-box '()) (make-atomic-box 'will-check)
-                     wake-pipe)))
+    (let ((sched (%make-scheduler epfd active-fd-count prompt-tag
+                                  runnables sources sleepers
+                                  inbox inbox-state wake-pipe)))
+      (nameset-add! schedulers-nameset sched)
+      sched)))
 
 (define current-scheduler (make-parameter #f))
 (define (make-source events expiry fiber) (vector events expiry fiber))
@@ -311,6 +321,7 @@
 
 (define (create-fiber sched thunk)
   (let ((fiber (make-fiber 'suspended sched #f)))
+    (nameset-add! fibers-nameset fiber)
     (schedule-fiber! fiber
                      (lambda ()
                        (call-with-values thunk
