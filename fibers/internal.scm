@@ -31,7 +31,10 @@
   #:use-module (ice-9 suspendable-ports)
   #:export (;; Low-level interface: schedulers and threads.
             make-scheduler
-            current-scheduler
+            with-scheduler
+            scheduler-name
+            (current-scheduler/public . current-scheduler)
+            (scheduler-kernel-thread/public . scheduler-kernel-thread)
             run-scheduler
             destroy-scheduler
             add-fd-events!
@@ -65,9 +68,11 @@
   (nameset-ref fibers-nameset name))
 
 (define-record-type <scheduler>
-  (%make-scheduler epfd active-fd-count prompt-tag runnables
-                   sources sleepers inbox inbox-state wake-pipe)
-  nio?
+  (%make-scheduler name epfd active-fd-count prompt-tag runnables
+                   sources sleepers inbox inbox-state wake-pipe
+                   kernel-thread)
+  scheduler?
+  (name scheduler-name set-scheduler-name!)
   (epfd scheduler-epfd)
   (active-fd-count scheduler-active-fd-count set-scheduler-active-fd-count!)
   (prompt-tag scheduler-prompt-tag)
@@ -82,7 +87,9 @@
   ;; atomic box of either 'will-check, 'needs-wake or 'dead
   (inbox-state scheduler-inbox-state)
   ;; (read-pipe . write-pipe)
-  (wake-pipe scheduler-wake-pipe))
+  (wake-pipe scheduler-wake-pipe)
+  ;; atomic parameter of thread
+  (kernel-thread scheduler-kernel-thread))
 
 ;; fixme: prevent fibers from running multiple times in a turn
 (define-record-type <fiber>
@@ -108,6 +115,17 @@
        (set-nonblocking! write-pipe)
        pair))))
 
+(define (make-atomic-parameter init)
+  (let ((box (make-atomic-box init)))
+    (case-lambda
+      (() (atomic-box-ref box))
+      ((new)
+       (if (eq? new init)
+           (atomic-box-set! box new)
+           (let ((prev (atomic-box-compare-and-swap! box init new)))
+             (unless (eq? prev init)
+               (error "owned by other thread" prev))))))))
+
 ;; FIXME: Perhaps epoll should handle the wake pipe business itself
 (define (make-scheduler)
   (let ((epfd (epoll-create))
@@ -120,17 +138,32 @@
                             <))
         (inbox (make-atomic-box '()))
         (inbox-state (make-atomic-box 'will-check))
-        (wake-pipe (make-wake-pipe)))
+        (wake-pipe (make-wake-pipe))
+        (kernel-thread (make-atomic-parameter #f)))
     (match wake-pipe
       ((read-pipe . _)
        (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
-    (let ((sched (%make-scheduler epfd active-fd-count prompt-tag
+    (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
                                   runnables sources sleepers
-                                  inbox inbox-state wake-pipe)))
-      (nameset-add! schedulers-nameset sched)
+                                  inbox inbox-state wake-pipe kernel-thread)))
+      (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
 
+(define-syntax-rule (with-scheduler scheduler body ...)
+  (let ((sched scheduler))
+    (dynamic-wind (lambda ()
+                    ((scheduler-kernel-thread sched) (current-thread)))
+                  (lambda ()
+                    (parameterize ((current-scheduler sched))
+                      body ...))
+                  (lambda ()
+                    ((scheduler-kernel-thread sched) #f)))))
+
+(define (scheduler-kernel-thread/public sched)
+  ((scheduler-kernel-thread sched)))
+
 (define current-scheduler (make-parameter #f))
+(define (current-scheduler/public) (current-scheduler))
 (define (make-source events expiry fiber) (vector events expiry fiber))
 (define (source-events s) (vector-ref s 0))
 (define (source-expiry s) (vector-ref s 1))
@@ -359,7 +392,7 @@
 
 (define* (resume-fiber fiber thunk)
   (let* ((cont (fiber-data fiber))
-         (thunk (lambda () (cont thunk))))
+         (thunk (if cont (lambda () (cont thunk)) thunk)))
     (schedule-fiber! fiber thunk)))
 
 (define (finalize-fd sched fd)

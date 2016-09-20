@@ -53,16 +53,17 @@
                      (install-suspendable-ports? #t)
                      (keep-scheduler? (eq? scheduler (current-scheduler))))
   (when install-suspendable-ports? (install-suspendable-ports!))
-  (parameterize ((current-scheduler scheduler)
-                 (current-read-waiter wait-for-readable)
-                 (current-write-waiter wait-for-writable))
-    (call-with-values
-        (lambda ()
-          (run-scheduler scheduler
-                         #:join-fiber (and init (spawn-fiber init scheduler))))
-      (lambda vals
-        (unless keep-scheduler? (destroy-scheduler scheduler))
-        (apply values vals)))))
+  (with-scheduler
+   scheduler
+   (parameterize ((current-read-waiter wait-for-readable)
+                  (current-write-waiter wait-for-writable))
+     (call-with-values
+         (lambda ()
+           (run-scheduler scheduler
+                          #:join-fiber (and init (spawn-fiber init scheduler))))
+       (lambda vals
+         (unless keep-scheduler? (destroy-scheduler scheduler))
+         (apply values vals))))))
 
 (define (require-current-scheduler)
   (or (current-scheduler)
