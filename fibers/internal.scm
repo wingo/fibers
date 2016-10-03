@@ -38,7 +38,7 @@
             run-scheduler
             destroy-scheduler
             add-fd-events!
-            add-sleeper!
+            add-timer!
 
             create-fiber
             current-fiber
@@ -69,7 +69,7 @@
 
 (define-record-type <scheduler>
   (%make-scheduler name epfd active-fd-count prompt-tag runnables
-                   sources sleepers inbox inbox-state wake-pipe
+                   sources timers inbox inbox-state wake-pipe
                    kernel-thread)
   scheduler?
   (name scheduler-name set-scheduler-name!)
@@ -80,8 +80,8 @@
   (runnables scheduler-runnables set-scheduler-runnables!)
   ;; fd -> ((total-events . min-expiry) #(events expiry fiber) ...)
   (sources scheduler-sources)
-  ;; PSQ of fiber -> expiry
-  (sleepers scheduler-sleepers set-scheduler-sleepers!)
+  ;; PSQ of thunk -> expiry
+  (timers scheduler-timers set-scheduler-timers!)
   ;; atomic box of (fiber ...)
   (inbox scheduler-inbox)
   ;; atomic box of either 'will-check, 'needs-wake or 'dead
@@ -133,8 +133,8 @@
         (prompt-tag (make-prompt-tag "fibers"))
         (runnables '())
         (sources (make-hash-table))
-        (sleepers (make-psq (match-lambda*
-                              (((t1 . f1) (t2 . f2)) (< t1 t2)))
+        (timers (make-psq (match-lambda*
+                              (((t1 . c1) (t2 . c2)) (< t1 t2)))
                             <))
         (inbox (make-atomic-box '()))
         (inbox-state (make-atomic-box 'will-check))
@@ -144,7 +144,7 @@
       ((read-pipe . _)
        (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
-                                  runnables sources sleepers
+                                  runnables sources timers
                                   inbox inbox-state wake-pipe kernel-thread)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
@@ -227,10 +227,9 @@
      (set-scheduler-active-fd-count! sched
                                      (1- (scheduler-active-fd-count sched)))
      (for-each (lambda (source)
-                 ;; FIXME: If we were waiting with a timeout, this
-                 ;; fiber might still be in "sleepers", and we should
-                 ;; probably remove it.  Currently we don't do timed
-                 ;; waits though, only sleeps.
+                 ;; FIXME: This fiber might have been woken up by
+                 ;; another event.  A moot point while file descriptor
+                 ;; operations aren't proper CML operations, though.
                  (unless (zero? (logand revents
                                         (logior (source-events source) EPOLLERR)))
                    (resume-fiber (source-fiber source) (lambda () revents))))
@@ -254,35 +253,34 @@
    ((not (null? (scheduler-runnables sched)))
     ;; Likewise, don't sleep if there are runnables scheduled already.
     0)
-   ((psq-empty? (scheduler-sleepers sched))
+   ((psq-empty? (scheduler-timers sched))
     -1)
    (else
-    (match (psq-min (scheduler-sleepers sched))
-      ((expiry . fiber)
+    (match (psq-min (scheduler-timers sched))
+      ((expiry . thunk)
        (let ((now (get-internal-real-time)))
          (if (< expiry now)
              0
              (round/ (- expiry now)
                      internal-time-units-per-millisecond))))))))
 
-(define (wake-sleepers sched)
-  ;; Resume fibers whose sleep has timed out.  Do it in such a way
-  ;; that the one with the earliest expiry is resumed last, so
-  ;; that it will will end up first on the runnable list.  If one
-  ;; of these fibers has already been resumed (perhaps because the
-  ;; fd is readable or writable), this resume will have no effect.
+(define (run-timers sched)
+  ;; Run expired timer thunks.  Do it in such a way that the one with
+  ;; the earliest expiry is called last, so that if a timer ends up
+  ;; resuming a fiber, the earliest one will end up first on the
+  ;; runnable list.
   (let ((now (get-internal-real-time)))
-    (let wake-sleepers ((sleepers (scheduler-sleepers sched)))
+    (let run-timers ((timers (scheduler-timers sched)))
       (cond
-       ((or (psq-empty? sleepers)
-            (< now (car (psq-min sleepers))))
-        (set-scheduler-sleepers! sched sleepers))
+       ((or (psq-empty? timers)
+            (< now (car (psq-min timers))))
+        (set-scheduler-timers! sched timers))
        (else
-        (call-with-values (lambda () (psq-pop sleepers))
+        (call-with-values (lambda () (psq-pop timers))
           (match-lambda*
-            (((_ . fiber) sleepers)
-             (wake-sleepers sleepers)
-             (resume-fiber fiber (lambda () 0))))))))))
+            (((_ . thunk) timers)
+             (run-timers timers)
+             (thunk)))))))))
 
 (define (handle-inbox sched)
   (for-each (match-lambda
@@ -297,9 +295,9 @@
   ;; because it was blocked on a channel, but then another fiber woke
   ;; it up.  In any case, check the kernel to see if any of the fd's
   ;; that we are interested in are active, and in that case schedule
-  ;; their corresponding fibers.  Also schedule any sleepers that have
-  ;; timed out, and process the inbox that receives
-  ;; requests-to-schedule from remote threads.
+  ;; their corresponding fibers.  Also run any timers that have timed
+  ;; out, and process the inbox that receives requests-to-schedule
+  ;; from remote threads.
   ;;
   ;; FIXME: use a deque instead
   (set-scheduler-runnables! sched (reverse (scheduler-runnables sched)))
@@ -313,7 +311,7 @@
                       seed))
     (atomic-box-set! (scheduler-inbox-state sched) 'will-check))
   (handle-inbox sched)
-  (wake-sleepers sched))
+  (run-timers sched))
 
 (define* (run-fiber fiber)
   (when (eq? (fiber-state fiber) 'runnable)
@@ -336,7 +334,7 @@
       (if bool #t (return #f)))
     (only-finished-if (zero? (scheduler-active-fd-count sched)))
     (only-finished-if (null? (atomic-box-ref (scheduler-inbox sched))))
-    (only-finished-if (psq-empty? (scheduler-sleepers sched)))))
+    (only-finished-if (psq-empty? (scheduler-timers sched)))))
 
 (define* (run-scheduler sched #:key join-fiber)
   (let lp ()
@@ -436,18 +434,10 @@ from a finalizer thread."
       (add-fdes-finalizer! fd (lambda (fd) (finalize-fd sched fd)))
       (epoll-add! (scheduler-epfd sched) fd (logior events EPOLLONESHOT))))))
 
-(define (add-sleeper! sched fiber seconds)
+(define (add-timer! sched thunk seconds)
   (let ((waketime (+ (get-internal-real-time)
                      (inexact->exact
                       (round (* seconds internal-time-units-per-second))))))
-    (set-scheduler-sleepers!
+    (set-scheduler-timers!
      sched
-     (psq-set (scheduler-sleepers sched) (cons waketime fiber) waketime)
-     #;
-     (let lp ((sleepers (scheduler-sleepers sched)))
-       (match sleepers
-         (((and sleeper (_ . (? (lambda (expiry) (> waketime expiry)))))
-           . tail)
-          (set-cdr! sleepers (lp tail))
-          sleepers)
-         (_ (acons fiber waketime sleepers)))))))
+     (psq-set (scheduler-timers sched) (cons waketime thunk) waketime))))

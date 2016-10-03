@@ -78,4 +78,7 @@
 (define (sleep seconds)
   (suspend-current-fiber
    (lambda (fiber)
-     (add-sleeper! (fiber-scheduler fiber) fiber seconds))))
+     (add-timer! (fiber-scheduler fiber)
+                 (lambda ()
+                   (resume-fiber fiber (lambda () 0)))
+                 seconds))))
