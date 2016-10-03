@@ -434,10 +434,8 @@ from a finalizer thread."
       (add-fdes-finalizer! fd (lambda (fd) (finalize-fd sched fd)))
       (epoll-add! (scheduler-epfd sched) fd (logior events EPOLLONESHOT))))))
 
-(define (add-timer! sched thunk seconds)
-  (let ((waketime (+ (get-internal-real-time)
-                     (inexact->exact
-                      (round (* seconds internal-time-units-per-second))))))
-    (set-scheduler-timers!
-     sched
-     (psq-set (scheduler-timers sched) (cons waketime thunk) waketime))))
+(define (add-timer! sched thunk expiry)
+  (set-scheduler-timers! sched
+                         (psq-set (scheduler-timers sched)
+                                  (cons expiry thunk)
+                                  expiry)))

@@ -21,6 +21,7 @@
   #:use-module (fibers epoll)
   #:use-module (fibers internal)
   #:use-module (fibers repl)
+  #:use-module (fibers timers)
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
@@ -28,7 +29,7 @@
             run-fibers
             spawn-fiber
             kill-fiber)
-  #:replace (sleep))
+  #:re-export (sleep))
 
 ;; A thunk and not a parameter to prevent users from using it as a
 ;; parameter.
@@ -74,11 +75,3 @@
 
 (define (kill-fiber fiber)
   (pk 'unimplemented-kill-fiber fiber))
-
-(define (sleep seconds)
-  (suspend-current-fiber
-   (lambda (fiber)
-     (add-timer! (fiber-scheduler fiber)
-                 (lambda ()
-                   (resume-fiber fiber (lambda () 0)))
-                 seconds))))
