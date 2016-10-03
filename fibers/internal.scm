@@ -301,15 +301,17 @@
   ;;
   ;; FIXME: use a deque instead
   (set-scheduler-runnables! sched (reverse (scheduler-runnables sched)))
-  (unless (zero? (scheduler-active-fd-count sched))
-    (atomic-box-set! (scheduler-inbox-state sched) 'needs-wake)
-    (epoll (scheduler-epfd sched)
-           32                           ; maxevents
-           (scheduler-poll-timeout sched)
-           #:folder (lambda (fd revents seed)
-                      (schedule-fibers-for-fd fd revents sched)
-                      seed))
-    (atomic-box-set! (scheduler-inbox-state sched) 'will-check))
+  (let ((timeout (scheduler-poll-timeout sched)))
+    (unless (and (not (zero? timeout))
+                 (zero? (scheduler-active-fd-count sched)))
+      (atomic-box-set! (scheduler-inbox-state sched) 'needs-wake)
+      (epoll (scheduler-epfd sched)
+             32                           ; maxevents
+             timeout
+             #:folder (lambda (fd revents seed)
+                        (schedule-fibers-for-fd fd revents sched)
+                        seed))
+      (atomic-box-set! (scheduler-inbox-state sched) 'will-check)))
   (handle-inbox sched)
   (run-timers sched))
 
