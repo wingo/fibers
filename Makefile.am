@@ -30,6 +30,7 @@ SOURCES = \
 	fibers/epoll.scm \
 	fibers/internal.scm \
 	fibers/nameset.scm \
+	fibers/operations.scm \
 	fibers/psq.scm \
 	fibers/repl.scm \
 	web/server/fibers.scm
@@ -42,7 +43,9 @@ epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 epoll_la_LIBADD = $(GUILE_LIBS)
 epoll_la_LDFLAGS = -export-dynamic -module
 
-TESTS=tests/basic.scm
+TESTS = \
+	tests/basic.scm \
+	tests/channels.scm
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \

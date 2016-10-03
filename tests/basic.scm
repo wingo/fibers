@@ -18,8 +18,7 @@
 ;;;;
 
 (define-module (tests basic)
-  #:use-module (fibers)
-  #:use-module (fibers channels))
+  #:use-module (fibers))
 
 (define failed? #f)
 
@@ -127,20 +126,6 @@
 
 (assert-run-fibers-returns (1) 1)
 
-(define-syntax-rule (rpc exp)
-  (let ((ch (make-channel)))
-    (spawn-fiber (lambda () (put-message ch exp)))
-    (get-message ch)))
-
-(assert-run-fibers-returns (1) (rpc 1))
-
-(define (rpc-fib n)
-  (rpc (if (< n 2)
-           1
-           (+ (rpc-fib (- n 1)) (rpc-fib (- n 2))))))
-
-(assert-run-fibers-returns (75025) (rpc-fib 24))
-
 (define (check-sleep timeout)
   (spawn-fiber (lambda ()
                  (let ((start (get-internal-real-time)))
@@ -155,13 +140,7 @@
 (assert-run-fibers-terminates
  (do-times 20 (check-sleep (random 1.0))))
 
-;; timed channel wait
-
-;; multi-channel wait
-
 ;; exceptions
-
-;; cross-thread calls
 
 ;; closing port causes pollerr
 
