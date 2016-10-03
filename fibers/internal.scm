@@ -290,8 +290,8 @@
 
 (define (schedule-runnables-for-next-turn sched)
   ;; Called when all runnables from the current turn have been run.
-  ;; Note that the there may be runnables already scheduled for the
-  ;; next turn; one way this can happen is if a fiber suspended itself
+  ;; Note that there may be runnables already scheduled for the next
+  ;; turn; one way this can happen is if a fiber suspended itself
   ;; because it was blocked on a channel, but then another fiber woke
   ;; it up.  In any case, check the kernel to see if any of the fd's
   ;; that we are interested in are active, and in that case schedule
