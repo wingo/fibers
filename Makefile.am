@@ -27,6 +27,7 @@ info_TEXINFOS=fibers.texi
 SOURCES = \
 	fibers.scm \
 	fibers/channels.scm \
+	fibers/deque.scm \
 	fibers/epoll.scm \
 	fibers/internal.scm \
 	fibers/nameset.scm \

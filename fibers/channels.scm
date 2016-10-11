@@ -31,6 +31,7 @@
   #:use-module (srfi srfi-9 gnu)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
+  #:use-module (fibers deque)
   #:use-module (fibers internal)
   #:use-module (fibers operations)
   #:export (make-channel
@@ -38,54 +39,6 @@
             get-operation
             put-message
             get-message))
-
-
-;; A functional double-ended queue ("deque") has a head and a tail,
-;; which are both lists.  The head is in FIFO order and the tail is in
-;; LIFO order.
-(define-inlinable (make-deque head tail)
-  (cons head tail))
-
-(define (make-empty-deque)
-  (make-deque '() '()))
-
-(define (enqueue dq item)
-  (match dq
-    ((head . tail)
-     (make-deque head (cons item tail)))))
-
-(define (undequeue dq item)
-  (match dq
-    ((head . tail)
-     (make-deque (cons item head) tail))))
-
-;; -> new deque, val | #f, #f
-(define (dequeue dq)
-  (match dq
-    ((() . ()) (values #f #f))
-    ((() . tail)
-     (dequeue (make-deque (reverse tail) '())))
-    (((item . head) . tail)
-     (values (make-deque head tail) item))))
-
-(define (dequeue-match dq pred)
-  (match dq
-    ((() . ()) (values #f #f))
-    ((() . tail)
-     (dequeue (make-deque (reverse tail) '())))
-    (((item . head) . tail)
-     (if (pred item)
-         (values (make-deque head tail) item)
-         (call-with-values (dequeue-match (make-deque head tail) pred)
-           (lambda (dq item*)
-             (values (undequeue dq item) item*)))))))
-
-(define (enqueue! qbox item)
-  (let spin ((q (atomic-box-ref qbox)))
-    (let* ((q* (enqueue q item))
-           (q** (atomic-box-compare-and-swap! qbox q q*)))
-      (unless (eq? q q**)
-        (spin q**)))))
 
 (define-record-type <channel>
   (%make-channel getq putq)
