@@ -18,8 +18,8 @@
 ;;;;
 
 (define-module (fibers internal)
-  #:use-module ((srfi srfi-1) #:select (append-reverse!))
   #:use-module (srfi srfi-9)
+  #:use-module (fibers deque)
   #:use-module (fibers epoll)
   #:use-module (fibers psq)
   #:use-module (fibers nameset)
@@ -68,7 +68,7 @@
   (nameset-ref fibers-nameset name))
 
 (define-record-type <scheduler>
-  (%make-scheduler name epfd active-fd-count prompt-tag runnables
+  (%make-scheduler name epfd active-fd-count prompt-tag runqueue
                    sources timers inbox inbox-state wake-pipe
                    kernel-thread)
   scheduler?
@@ -76,8 +76,8 @@
   (epfd scheduler-epfd)
   (active-fd-count scheduler-active-fd-count set-scheduler-active-fd-count!)
   (prompt-tag scheduler-prompt-tag)
-  ;; (fiber ...)
-  (runnables scheduler-runnables set-scheduler-runnables!)
+  ;; atomic box of deque of fiber
+  (runqueue scheduler-runqueue)
   ;; fd -> ((total-events . min-expiry) #(events expiry fiber) ...)
   (sources scheduler-sources)
   ;; PSQ of thunk -> expiry
@@ -131,7 +131,7 @@
   (let ((epfd (epoll-create))
         (active-fd-count 0)
         (prompt-tag (make-prompt-tag "fibers"))
-        (runnables '())
+        (runqueue (make-atomic-box (make-empty-deque)))
         (sources (make-hash-table))
         (timers (make-psq (match-lambda*
                               (((t1 . c1) (t2 . c2)) (< t1 t2)))
@@ -144,7 +144,7 @@
       ((read-pipe . _)
        (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
-                                  runnables sources timers
+                                  runqueue sources timers
                                   inbox inbox-state wake-pipe kernel-thread)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
@@ -190,8 +190,7 @@
       (when (eq? (fiber-state fiber) 'suspended)
         (set-fiber-state! fiber 'runnable)
         (set-fiber-data! fiber thunk)
-        (set-scheduler-runnables! sched
-                                  (cons fiber (scheduler-runnables sched)))))
+        (enqueue! (scheduler-runqueue sched) fiber)))
     (define (schedule/remote)
       (atomic-box-prepend! (scheduler-inbox sched) (cons fiber thunk))
       (match (atomic-box-ref (scheduler-inbox-state sched))
@@ -250,8 +249,9 @@
     ;; There are pending requests in our inbox, so we don't need to
     ;; sleep at all.
     0)
-   ((not (null? (scheduler-runnables sched)))
-    ;; Likewise, don't sleep if there are runnables scheduled already.
+   ((not (empty-deque? (atomic-box-ref (scheduler-runqueue sched))))
+    ;; Likewise, don't sleep if there are fibers in the runqueue
+    ;; already.
     0)
    ((psq-empty? (scheduler-timers sched))
     -1)
@@ -265,10 +265,7 @@
                      internal-time-units-per-millisecond))))))))
 
 (define (run-timers sched)
-  ;; Run expired timer thunks.  Do it in such a way that the one with
-  ;; the earliest expiry is called last, so that if a timer ends up
-  ;; resuming a fiber, the earliest one will end up first on the
-  ;; runnable list.
+  ;; Run expired timer thunks in the order that they expired.
   (let ((now (get-internal-real-time)))
     (let run-timers ((timers (scheduler-timers sched)))
       (cond
@@ -279,8 +276,8 @@
         (call-with-values (lambda () (psq-pop timers))
           (match-lambda*
             (((_ . thunk) timers)
-             (run-timers timers)
-             (thunk)))))))))
+             (thunk)
+             (run-timers timers)))))))))
 
 (define (handle-inbox sched)
   (for-each (match-lambda
@@ -298,9 +295,6 @@
   ;; their corresponding fibers.  Also run any timers that have timed
   ;; out, and process the inbox that receives requests-to-schedule
   ;; from remote threads.
-  ;;
-  ;; FIXME: use a deque instead
-  (set-scheduler-runnables! sched (reverse (scheduler-runnables sched)))
   (let ((timeout (scheduler-poll-timeout sched)))
     (unless (and (not (zero? timeout))
                  (zero? (scheduler-active-fd-count sched)))
@@ -341,7 +335,7 @@
 (define* (run-scheduler sched #:key join-fiber)
   (let lp ()
     (schedule-runnables-for-next-turn sched)
-    (match (scheduler-runnables sched)
+    (match (dequeue-all! (scheduler-runqueue sched))
       (()
        ;; Could be the scheduler is stopping, or it could be that we
        ;; got a spurious wakeup.  In any case, this is the place to
@@ -352,7 +346,6 @@
         ((not (eq? (fiber-state join-fiber) 'finished)) (lp))
         (else (apply values (fiber-data join-fiber)))))
       (runnables
-       (set-scheduler-runnables! sched '())
        (for-each run-fiber runnables)
        (lp)))))
 

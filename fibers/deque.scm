@@ -22,10 +22,13 @@
   #:use-module (ice-9 match)
   #:export (make-deque
             make-empty-deque
+            empty-deque?
             enqueue
             dequeue
+            dequeue-all
             dequeue-match
             undequeue
+            dequeue-all!
             enqueue!))
 
 ;; A functional double-ended queue ("deque") has a head and a tail,
@@ -36,6 +39,11 @@
 
 (define (make-empty-deque)
   (make-deque '() '()))
+
+(define (empty-deque? dq)
+  (match dq
+    ((() . ()) #t)
+    (_ #f)))
 
 (define (enqueue dq item)
   (match dq
@@ -50,6 +58,11 @@
      (dequeue (make-deque (reverse tail) '())))
     (((item . head) . tail)
      (values (make-deque head tail) item))))
+
+(define (dequeue-all dq)
+  (match dq
+    ((head . ()) head)
+    ((head . tail) (append head (reverse tail)))))
 
 (define (dequeue-match dq pred)
   (match dq
@@ -68,9 +81,21 @@
     ((head . tail)
      (make-deque (cons item head) tail))))
 
-(define (enqueue! qbox item)
-  (let spin ((q (atomic-box-ref qbox)))
-    (let* ((q* (enqueue q item))
-           (q** (atomic-box-compare-and-swap! qbox q q*)))
-      (unless (eq? q q**)
-        (spin q**)))))
+(define-inlinable (update! box f)
+  (let spin ((x (atomic-box-ref box)))
+    (call-with-values (lambda () (f x))
+      (lambda (x* ret)
+        (let ((x** (atomic-box-compare-and-swap! box x x*)))
+          (if (eq? x x**)
+              ret
+              (spin x**)))))))
+
+(define (dequeue-all! dqbox)
+  (update! dqbox (lambda (dq)
+                   (values (make-empty-deque)
+                           (dequeue-all dq)))))
+
+(define (enqueue! dqbox item)
+  (update! dqbox (lambda (dq)
+                   (values (enqueue dq item)
+                           #f))))
