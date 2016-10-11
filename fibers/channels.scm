@@ -40,44 +40,45 @@
             get-message))
 
 
-;; A functional queue has a head and a tail, which are both lists.
-;; The head is in FIFO order and the tail is in LIFO order.
-(define-inlinable (make-queue head tail)
+;; A functional double-ended queue ("deque") has a head and a tail,
+;; which are both lists.  The head is in FIFO order and the tail is in
+;; LIFO order.
+(define-inlinable (make-deque head tail)
   (cons head tail))
 
-(define (make-empty-queue)
-  (make-queue '() '()))
+(define (make-empty-deque)
+  (make-deque '() '()))
 
-(define (enqueue queue item)
-  (match queue
+(define (enqueue dq item)
+  (match dq
     ((head . tail)
-     (make-queue head (cons item tail)))))
+     (make-deque head (cons item tail)))))
 
-(define (undequeue queue item)
-  (match queue
+(define (undequeue dq item)
+  (match dq
     ((head . tail)
-     (make-queue (cons item head) tail))))
+     (make-deque (cons item head) tail))))
 
-;; -> new queue, val | #f, #f
-(define (dequeue queue)
-  (match queue
+;; -> new deque, val | #f, #f
+(define (dequeue dq)
+  (match dq
     ((() . ()) (values #f #f))
     ((() . tail)
-     (dequeue (make-queue (reverse tail) '())))
+     (dequeue (make-deque (reverse tail) '())))
     (((item . head) . tail)
-     (values (make-queue head tail) item))))
+     (values (make-deque head tail) item))))
 
-(define (dequeue-match queue pred)
-  (match queue
+(define (dequeue-match dq pred)
+  (match dq
     ((() . ()) (values #f #f))
     ((() . tail)
-     (dequeue (make-queue (reverse tail) '())))
+     (dequeue (make-deque (reverse tail) '())))
     (((item . head) . tail)
      (if (pred item)
-         (values (make-queue head tail) item)
-         (call-with-values (dequeue-match (make-queue head tail) pred)
-           (lambda (queue item*)
-             (values (undequeue queue item) item*)))))))
+         (values (make-deque head tail) item)
+         (call-with-values (dequeue-match (make-deque head tail) pred)
+           (lambda (dq item*)
+             (values (undequeue dq item) item*)))))))
 
 (define (enqueue! qbox item)
   (let spin ((q (atomic-box-ref qbox)))
@@ -89,14 +90,14 @@
 (define-record-type <channel>
   (%make-channel getq putq)
   channel?
-  ;; atomic box of queue
+  ;; atomic box of deque
   (getq channel-getq)
-  ;; atomic box of queue
+  ;; atomic box of deque
   (putq channel-putq))
 
 (define (make-channel)
-  (%make-channel (make-atomic-box (make-empty-queue))
-                 (make-atomic-box (make-empty-queue))))
+  (%make-channel (make-atomic-box (make-empty-deque))
+                 (make-atomic-box (make-empty-deque))))
 
 (define (put-operation channel msg)
   (match channel
