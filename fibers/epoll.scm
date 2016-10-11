@@ -18,6 +18,11 @@
 ;;;; 
 
 (define-module (fibers epoll)
+  #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
+  #:use-module (ice-9 atomic)
+  #:use-module (ice-9 control)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 suspendable-ports)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-9 gnu)
   #:use-module (rnrs bytevectors)
@@ -27,6 +32,7 @@
             epoll-add!
             epoll-modify!
             epoll-remove!
+            epoll-wake!
             epoll
 
             EPOLLIN EPOLLOUT EPOLLPRO EPOLLERR EPOLLHUP EPOLLET))
@@ -39,11 +45,26 @@
 (when (defined? 'EPOLLONESHOT)
   (export EPOLLONESHOT))
 
+(define (make-wake-pipe)
+  (define (set-nonblocking! port)
+    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL))))
+  (let ((pair (pipe)))
+    (match pair
+      ((read-pipe . write-pipe)
+       (setvbuf write-pipe 'none)
+       (set-nonblocking! read-pipe)
+       (set-nonblocking! write-pipe)
+       (values read-pipe write-pipe)))))
+
 (define-record-type <epoll>
-  (make-epoll fd eventsv)
+  (make-epoll fd eventsv state wake-read-pipe wake-write-pipe)
   epoll?
   (fd epoll-fd set-epoll-fd!)
-  (eventsv epoll-eventsv set-epoll-eventsv!))
+  (eventsv epoll-eventsv set-epoll-eventsv!)
+  ;; atomic box of either 'waiting, 'not-waiting or 'dead
+  (state epoll-state)
+  (wake-read-pipe epoll-wake-read-pipe)
+  (wake-write-pipe epoll-wake-write-pipe))
 
 (define-syntax events-offset
   (lambda (x)
@@ -67,12 +88,21 @@
 (add-hook! after-gc-hook pump-epoll-guardian)
 
 (define* (epoll-create #:key (close-on-exec? #t))
-  (let ((epoll (make-epoll (primitive-epoll-create close-on-exec?) #f)))
-    (epoll-guardian epoll)
-    epoll))
+  (call-with-values (lambda () (make-wake-pipe))
+    (lambda (read-pipe write-pipe)
+      (let* ((state (make-atomic-box 'not-waiting))
+             (epoll (make-epoll (primitive-epoll-create close-on-exec?) #f
+                                state read-pipe write-pipe)))
+        (epoll-guardian epoll)
+        (epoll-add! epoll (fileno read-pipe) EPOLLIN)
+        epoll))))
 
 (define (epoll-destroy epoll)
+  (atomic-box-set! (epoll-state epoll) 'dead)
   (when (epoll-fd epoll)
+    (close-port (epoll-wake-read-pipe epoll))
+    ;; FIXME: ignore errors flushing output
+    (close-port (epoll-wake-write-pipe epoll))
     (close-fdes (epoll-fd epoll))
     (set-epoll-fd! epoll #f)))
 
@@ -84,6 +114,21 @@
 
 (define (epoll-remove! epoll fd)
   (primitive-epoll-ctl (epoll-fd epoll) EPOLL_CTL_DEL fd))
+
+(define (epoll-wake! epoll)
+  "Run after modifying the shared state used by a thread that might be
+waiting on this epoll descriptor, to break that thread out of the
+epoll wait (if appropriate)."
+  (match (atomic-box-ref (epoll-state epoll))
+    ;; It is always correct to wake an epoll via the pipe.  However we
+    ;; can avoid it if the epoll is guaranteed to see that the
+    ;; runqueue is not empty before it goes to poll next time.
+    ('waiting
+     (let/ec cancel
+       (parameterize ((current-write-waiter cancel))
+         (put-u8 (epoll-wake-write-pipe epoll) #x00))))
+    ('not-waiting #t)
+    ('dead (error "epoll instance is dead"))))
 
 (define (epoll-default-folder fd events seed)
   (acons fd events seed))
@@ -98,14 +143,25 @@
           (set-epoll-eventsv! epoll v)
           v))))
 
-(define* (epoll epoll #:optional maxevents (timeout -1)
+(define* (epoll epoll #:optional maxevents (timeout-fn (lambda () -1))
                 #:key (folder epoll-default-folder) (seed '()))
+  (atomic-box-set! (epoll-state epoll) 'waiting)
   (let* ((eventsv (ensure-epoll-eventsv epoll maxevents))
-         (n (primitive-epoll-wait (epoll-fd epoll) eventsv timeout)))
+         (n (primitive-epoll-wait (epoll-fd epoll) eventsv (timeout-fn)))
+         (read-pipe (epoll-wake-read-pipe epoll))
+         (read-pipe-fd (fileno read-pipe)))
+    (atomic-box-set! (epoll-state epoll) 'not-waiting)
     (let lp ((seed seed) (i 0))
       (if (< i n)
-          (lp (folder (bytevector-s32-native-ref eventsv (fd-offset i))
-                      (bytevector-u32-native-ref eventsv (events-offset i))
+          (let ((fd (bytevector-s32-native-ref eventsv (fd-offset i)))
+                (events (bytevector-u32-native-ref eventsv (events-offset i))))
+            (lp (if (eqv? fd read-pipe-fd)
+                    (begin
+                      (let/ec cancel
+                        ;; Slurp off any wake bytes from the fd.
+                        (parameterize ((current-read-waiter cancel))
+                          (let lp () (get-u8 read-pipe) (lp))))
                       seed)
-              (1+ i))
+                    (folder fd events seed))
+                (1+ i)))
           seed))))

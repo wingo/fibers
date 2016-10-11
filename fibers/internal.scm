@@ -24,11 +24,8 @@
   #:use-module (fibers psq)
   #:use-module (fibers nameset)
   #:use-module (ice-9 atomic)
-  #:use-module ((ice-9 control) #:select (let/ec))
-  #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
-  #:use-module (ice-9 fdes-finalizers)
   #:use-module (ice-9 match)
-  #:use-module (ice-9 suspendable-ports)
+  #:use-module (ice-9 fdes-finalizers)
   #:export (;; Low-level interface: schedulers and threads.
             make-scheduler
             with-scheduler
@@ -69,8 +66,7 @@
 
 (define-record-type <scheduler>
   (%make-scheduler name epfd active-fd-count prompt-tag runqueue
-                   sources timers inbox-state wake-pipe
-                   kernel-thread)
+                   sources timers kernel-thread)
   scheduler?
   (name scheduler-name set-scheduler-name!)
   (epfd scheduler-epfd)
@@ -82,10 +78,6 @@
   (sources scheduler-sources)
   ;; PSQ of thunk -> expiry
   (timers scheduler-timers set-scheduler-timers!)
-  ;; atomic box of either 'will-check, 'needs-wake or 'dead
-  (inbox-state scheduler-inbox-state)
-  ;; (read-pipe . write-pipe)
-  (wake-pipe scheduler-wake-pipe)
   ;; atomic parameter of thread
   (kernel-thread scheduler-kernel-thread))
 
@@ -100,17 +92,6 @@
   ;; for suspended, a continuation; for finished, a list of values.
   (data fiber-data set-fiber-data!))
 
-(define (make-wake-pipe)
-  (define (set-nonblocking! port)
-    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL))))
-  (let ((pair (pipe)))
-    (match pair
-      ((read-pipe . write-pipe)
-       (setvbuf write-pipe 'none)
-       (set-nonblocking! read-pipe)
-       (set-nonblocking! write-pipe)
-       pair))))
-
 (define (make-atomic-parameter init)
   (let ((box (make-atomic-box init)))
     (case-lambda
@@ -122,7 +103,6 @@
              (unless (eq? prev init)
                (error "owned by other thread" prev))))))))
 
-;; FIXME: Perhaps epoll should handle the wake pipe business itself
 (define (make-scheduler)
   (let ((epfd (epoll-create))
         (active-fd-count 0)
@@ -132,15 +112,9 @@
         (timers (make-psq (match-lambda*
                               (((t1 . c1) (t2 . c2)) (< t1 t2)))
                             <))
-        (inbox-state (make-atomic-box 'will-check))
-        (wake-pipe (make-wake-pipe))
         (kernel-thread (make-atomic-parameter #f)))
-    (match wake-pipe
-      ((read-pipe . _)
-       (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
-                                  runqueue sources timers
-                                  inbox-state wake-pipe kernel-thread)))
+                                  runqueue sources timers kernel-thread)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
 
@@ -172,31 +146,17 @@
       (unless (eq? tail tail*)
         (lp tail*)))))
 
-(define (wake-remote-scheduler! sched)
-  (match (scheduler-wake-pipe sched)
-    ((_ . write-pipe)
-     (let/ec cancel
-       (parameterize ((current-write-waiter cancel))
-         (put-u8 write-pipe #x00))))))
-
 (define (schedule-fiber! fiber thunk)
-  ;; The fiber will be woken at most once, and we are the ones that
-  ;; will wake it, so we can set the thunk directly.  Adding the fiber
-  ;; to the runqueue is an atomic operation with SEQ_CST ordering, so
-  ;; that will make sure this operation is visible even for a fiber
-  ;; scheduled on a remote thread.
+  ;; The fiber will be resumed at most once, and we are the ones that
+  ;; will resume it, so we can set the thunk directly.  Adding the
+  ;; fiber to the runqueue is an atomic operation with SEQ_CST
+  ;; ordering, so that will make sure this operation is visible even
+  ;; for a fiber scheduled on a remote thread.
   (set-fiber-data! fiber thunk)
   (let ((sched (fiber-scheduler fiber)))
     (enqueue! (scheduler-runqueue sched) fiber)
     (unless (eq? sched (current-scheduler))
-      (match (atomic-box-ref (scheduler-inbox-state sched))
-        ;; It is always correct to wake the scheduler via the pipe.
-        ;; However we can avoid it if the scheduler is guaranteed to
-        ;; see that the runqueue is not empty before it goes to poll
-        ;; next time.
-        ('will-check #t)
-        ('needs-wake (wake-remote-scheduler! sched))
-        ('dead (error "Scheduler is dead"))))
+      (epoll-wake! (scheduler-epfd sched)))
     (values)))
 
 (define internal-time-units-per-millisecond
@@ -204,17 +164,7 @@
 
 (define (schedule-fibers-for-fd fd revents sched)
   (match (hashv-ref (scheduler-sources sched) fd)
-    (#f
-     (match (scheduler-wake-pipe sched)
-       ((read-pipe . _)
-        (cond
-         ((eqv? fd (fileno read-pipe))
-          ;; Slurp off any wake bytes from the fd.
-          (let/ec cancel
-            (parameterize ((current-write-waiter cancel))
-              (let lp () (get-u8 read-pipe) (lp)))))
-         (else
-          (warn "scheduler for unknown fd" fd))))))
+    (#f (warn "scheduler for unknown fd" fd))
     (sources
      (set-scheduler-active-fd-count! sched
                                      (1- (scheduler-active-fd-count sched)))
@@ -242,7 +192,10 @@
     ;; Don't sleep if there are fibers in the runqueue already.
     0)
    ((psq-empty? (scheduler-timers sched))
-    -1)
+    ;; If there are no timers, only sleep if there are active fd's. (?)
+    (cond
+     ((zero? (scheduler-active-fd-count sched)) 0)
+     (else -1)))
    (else
     (match (psq-min (scheduler-timers sched))
       ((expiry . thunk)
@@ -276,17 +229,12 @@
   ;; In any case, check the kernel to see if any of the fd's that we
   ;; are interested in are active, and in that case schedule their
   ;; corresponding fibers.  Also run any timers that have timed out.
-  (let ((timeout (scheduler-poll-timeout sched)))
-    (unless (and (not (zero? timeout))
-                 (zero? (scheduler-active-fd-count sched)))
-      (atomic-box-set! (scheduler-inbox-state sched) 'needs-wake)
-      (epoll (scheduler-epfd sched)
-             32                           ; maxevents
-             timeout
-             #:folder (lambda (fd revents seed)
-                        (schedule-fibers-for-fd fd revents sched)
-                        seed))
-      (atomic-box-set! (scheduler-inbox-state sched) 'will-check)))
+  (epoll (scheduler-epfd sched)
+         32                           ; maxevents
+         (lambda () (scheduler-poll-timeout sched))
+         #:folder (lambda (fd revents seed)
+                    (schedule-fibers-for-fd fd revents sched)
+                    seed))
   (run-timers sched))
 
 (define* (run-fiber fiber)
@@ -320,12 +268,6 @@
 (define (destroy-scheduler sched)
   #;
   (for-each kill-fiber (list-copy (scheduler-fibers sched)))
-  (atomic-box-set! (scheduler-inbox-state sched) 'dead)
-  (match (scheduler-wake-pipe sched)
-    ((read-pipe . write-pipe)
-     (close-port read-pipe)
-     ;; FIXME: ignore errors flushing output
-     (close-port write-pipe)))
   (epoll-destroy (scheduler-epfd sched)))
 
 (define (create-fiber sched thunk)
