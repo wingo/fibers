@@ -130,8 +130,8 @@ particular implementation, @dfn{kernel threads}.  Kernel threads are
 very low-level abstractions that are provided by the operating system.
 The nice thing about kernel threads is that they can use any CPU that
 is the kernel knows about.  That's an important factor in today's
-computing landscape, where Moore's law seems to have ended and we are
-getting more cores instead of more gigahertz.
+computing landscape, where Moore's law seems to be giving us more
+cores instead of more gigahertz.
 
 However, as a building block for a highly concurrent system, kernel
 threads have a few important problems.
@@ -203,19 +203,94 @@ possible to implement remote message send and receive as a process
 that serializes and parses messages between a channel and a byte sink
 or source.  In this way we get cheap local channels, and network shims
 are under the programmer's control.  This is the approach that the Go
-language takes, and is the one we use in Guile.
+language takes, and is the one we use in Fibers.
 
-Channels and message send/receive is a great start, but it's not
-sufficient for all purposes.  At the minimum, a program should be able
-to wait for a message send or receive over multiple channels at once.
-Go supports receive over multiple channels via its @code{select}
-primitive, but there is a more general solution invented by Concurrent
-ML, which is an abstraction over messages.  In Concurrent ML, you can
-get an event directly from a channel; actually synchronizing on the
-reception of the event is a separate operation.  Together with a
-primitive to synchronize on one of a number of events, Concurrent ML
-allows programs to build @code{select} in user-space.  It looks like
-the right direction for Guile to go too.
+Structuring a concurrent program as separate threads that communicate
+over channels is an old idea that goes back to Tony Hoare's work on
+``Communicating Sequential Processes'' (CSP).  CSP is an elegant tower
+of mathematical abstraction whose layers form a pattern language for
+building concurrent systems that you can still reason about.
+Interestingly, it does so without any concept of time at all, instead
+representing a thread's behavior as a @dfn{trace} of instantaneous
+events.  Threads themselves are like functions that unfold over the
+possible events to produce the actual event trace seen at run-time.
+
+This view of events as instantaneous happenings extends to
+communication as well.  In CSP, one communication between two threads
+is modelled as an instantaneous event, partitioning the traces of the
+two threads into ``before'' and ``after'' segments.
+
+Practically speaking, this has ramifications in the Go language, which
+was heavily inspired by CSP.  You might think that a channel is just a
+an asynchronous queue that blocks when writing to a full queue, or
+when reading from an empty queue.  That's a bit closer to the Erlang
+conception of how things should work, though as we mentioned, Erlang
+simply slows down writes to full mailboxes rather than blocking them
+entirely.  However, that's not what Go and other systems in the CSP
+family do; sending a message on a channel will block until there is a
+receiver available, and vice versa.  The threads are said to
+``rendezvous'' at the event.
+
+Unbuffered channels have the interesting property that you can
+@code{select} between sending a message on channel @var{a} or channel
+@var{b}, and in the end only one message will be sent; nothing happens
+until there is a receiver ready to take the message.  In this way
+messages are really owned by threads and never by the channels
+themselves.  You can of course add buffering if you like, simply by
+making a thread that waits on either sends or receives on a channel,
+and which buffers sends and makes them available to receives.  It's
+also possible to add explicit support for buffered channels, as Go
+does, which can reduce the number of context switches as there is no
+explicit buffer thread.
+
+Whether to buffer or not to buffer is a tricky choice.  It's possible
+to implement singly-buffered channels in a system like Erlang via an
+explicit send/acknowlege protocol, though it seems difficult to
+implement completely unbuffered channels.  As we mentioned, it's
+possible to add buffering to an unbuffered system by the introduction
+of explicit buffer threads.  In the end though in Fibers we follow
+CSP's lead so that we can implement the nice @code{select} behavior
+that we mentioned above.
+
+As a final point, @code{select} is OK but is not a great language
+abstraction.  Say you call a function and it returns some kind of
+asynchronous result which you then have to @code{select} on.  It could
+return this result as a channel, and that would be fine: you can add
+that channel to the other channels in your @code{select} set and you
+are good.  However, what if what the function does is receive a
+message on a channel, then do something with the message?  In that
+case the function should return a channel, plus a continuation (as a
+closure or something).  If @code{select} results in a message being
+received over that channel, then we call the continuation on the
+message.  Fine.  But, what if the function itself wanted to
+@code{select} over some channels?  It could return multiple channels
+and continuations, but that becomes unwieldy.
+
+What we need is an abstraction over asynchronous operations, and that
+is the main idea of a CSP-derived system called ``Concurrent ML''
+(CML).  Originally implemented as a library on top of Standard ML of
+New Jersey by John Reppy, CML provides this abstraction, which in
+Fibers is called an @dfn{operation}@footnote{CML uses the term
+@dfn{event}, but we find this to be a confusing name.}.  Calling
+@code{send-operation} on a channel returns an operation, which is just
+a value.  Operations are like closures in a way; a closure wraps up
+code in its environment, which can be later called many times or not
+at all.  Operations likewise can be @dfn{performed}@footnote{In CML,
+@dfn{synchronized}.} many times or not at all; performing an operation
+is like calling a function.  The interesting part is that you can
+compose operations via the @code{wrap-operation} and
+@code{choose-operation} combinators.  The former lets you bundle up an
+operation and a continuation.  The latter lets you construct an
+operation that chooses over a number of operations.  Calling
+@code{perform-operation} on a choice operation will perform one and
+only one of the choices.  Performing an operation will call its
+@code{wrap-operation} continuation on the resulting values.
+
+While it's possible to implement Concurrent ML in terms of Go's
+channels and baked-in @code{select} statement, it's more expressive to
+do it the other way around, as that also lets us implement other
+operations types besides channel send and receive, for example
+timeouts and condition variables.
 
 @node Design
 @section Fibers design
@@ -224,7 +299,7 @@ In Fibers, the unit of computation is the @dfn{fiber}, a lightweight
 thread managed by Guile.  A fiber communicates with the world via
 normal Guile ports: @code{get-bytevector}, @code{put-string}, and all
 that.  Between themselves, fibers send and receive Scheme values over
-@dfn{channels}, lightweight queues.
+@dfn{channels}.
 
 Whenever a fiber tries to read but no data is available, or tries to
 write but no data can be written, Guile will suspend the fiber and
@@ -258,20 +333,20 @@ behavior so that if you choose to devote multiple CPU cores to
 servicing fibers, that they can share the workload.
 
 Ports are how fibers communicate with the world; channels are how
-fibers communicate with each other.  When a channel is created, it is
-created with a maximum number of enqueued messages (by default one).
-Sending to a channel with space in the queue will not suspend the
-calling thread.  A fiber that tries to write to a full queue or read
-from a channel with an empty queue will add itself to a list of
-``waiters'' for the channel and suspend itself to the scheduler.  A
-read from a full queue or a write to an empty queue will unblock
-waiters on a channel.
+fibers communicate with each other.  Channels are meeting places
+between fibers.  A fiber that goes to send a message over a channel
+will block until there is a fiber ready to receive the message, and
+vice versa.  Once both parties are ready, the message is exchanged and
+both parties resume.  There can be multiple fibers waiting to read and
+write on a channel, allowing channels to express not only pipelines
+but also common concurrency patterns such as fan-in and fan-out.
 
-Unlike Erlang channels, channels in Fiber are purely local and do not
+Unlike Erlang channels, channels in Fibers are purely local and do not
 attempt to provide the illusion of network transparency.  This does
 have the positive advantage that we are able to provide better
-backpressure support than Erlang, blocking when a channels's queue is
-full instead of letting the sender keep sending many messages.
+backpressure support than Erlang, blocking when no receiver is
+available to handle a message instead of letting the sender keep
+sending many messages.
 
 On the other hand, currently fibers are not preemptively scheduled.  A
 fiber will only suspend when it would block on channel receive or
