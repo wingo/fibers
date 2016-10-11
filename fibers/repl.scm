@@ -107,7 +107,8 @@ If SCHED is given, limit to fibers bound to the given fold."
            ;; How to show fiber data?  Would be nice to say "suspended
            ;; at foo.scm:32:4".
            (when (or (not sched) (eq? (fiber-scheduler fiber) sched))
-             (format #t "~a ~8t~a\n" id (fiber-state fiber)))))
+             (format #t "~a ~8t~a\n" id
+                     (if (fiber-data fiber) "(suspended)" "")))))
         fibers)))))
 
 (define-meta-command ((spawn-fiber fibers) repl (form) #:optional sched)

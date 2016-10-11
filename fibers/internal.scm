@@ -44,7 +44,7 @@
             current-fiber
             kill-fiber
             fiber-scheduler
-            fiber-state
+            fiber-data
 
             fold-all-schedulers
             scheduler-by-name
@@ -69,7 +69,7 @@
 
 (define-record-type <scheduler>
   (%make-scheduler name epfd active-fd-count prompt-tag runqueue
-                   sources timers inbox inbox-state wake-pipe
+                   sources timers inbox-state wake-pipe
                    kernel-thread)
   scheduler?
   (name scheduler-name set-scheduler-name!)
@@ -82,8 +82,6 @@
   (sources scheduler-sources)
   ;; PSQ of thunk -> expiry
   (timers scheduler-timers set-scheduler-timers!)
-  ;; atomic box of (fiber ...)
-  (inbox scheduler-inbox)
   ;; atomic box of either 'will-check, 'needs-wake or 'dead
   (inbox-state scheduler-inbox-state)
   ;; (read-pipe . write-pipe)
@@ -93,10 +91,8 @@
 
 ;; fixme: prevent fibers from running multiple times in a turn
 (define-record-type <fiber>
-  (make-fiber state scheduler data)
+  (make-fiber scheduler data)
   fiber?
-  ;; One of: runnable, running, suspended, finished.
-  (state fiber-state set-fiber-state!)
   ;; The scheduler that a fiber runs in.  As a scheduler only runs in
   ;; one kernel thread, this binds a fiber to a kernel thread.
   (scheduler fiber-scheduler)
@@ -136,7 +132,6 @@
         (timers (make-psq (match-lambda*
                               (((t1 . c1) (t2 . c2)) (< t1 t2)))
                             <))
-        (inbox (make-atomic-box '()))
         (inbox-state (make-atomic-box 'will-check))
         (wake-pipe (make-wake-pipe))
         (kernel-thread (make-atomic-parameter #f)))
@@ -145,7 +140,7 @@
        (epoll-add! epfd (fileno read-pipe) EPOLLIN)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
                                   runqueue sources timers
-                                  inbox inbox-state wake-pipe kernel-thread)))
+                                  inbox-state wake-pipe kernel-thread)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
 
@@ -185,25 +180,23 @@
          (put-u8 write-pipe #x00))))))
 
 (define (schedule-fiber! fiber thunk)
+  ;; The fiber will be woken at most once, and we are the ones that
+  ;; will wake it, so we can set the thunk directly.  Adding the fiber
+  ;; to the runqueue is an atomic operation with SEQ_CST ordering, so
+  ;; that will make sure this operation is visible even for a fiber
+  ;; scheduled on a remote thread.
+  (set-fiber-data! fiber thunk)
   (let ((sched (fiber-scheduler fiber)))
-    (define (schedule/local)
-      (when (eq? (fiber-state fiber) 'suspended)
-        (set-fiber-state! fiber 'runnable)
-        (set-fiber-data! fiber thunk)
-        (enqueue! (scheduler-runqueue sched) fiber)))
-    (define (schedule/remote)
-      (atomic-box-prepend! (scheduler-inbox sched) (cons fiber thunk))
+    (enqueue! (scheduler-runqueue sched) fiber)
+    (unless (eq? sched (current-scheduler))
       (match (atomic-box-ref (scheduler-inbox-state sched))
         ;; It is always correct to wake the scheduler via the pipe.
         ;; However we can avoid it if the scheduler is guaranteed to
-        ;; see that the inbox is not empty before it goes to poll next
-        ;; time.
+        ;; see that the runqueue is not empty before it goes to poll
+        ;; next time.
         ('will-check #t)
         ('needs-wake (wake-remote-scheduler! sched))
         ('dead (error "Scheduler is dead"))))
-    (if (eq? sched (current-scheduler))
-        (schedule/local)
-        (schedule/remote))
     (values)))
 
 (define internal-time-units-per-millisecond
@@ -245,13 +238,8 @@
 
 (define (scheduler-poll-timeout sched)
   (cond
-   ((not (null? (atomic-box-ref (scheduler-inbox sched))))
-    ;; There are pending requests in our inbox, so we don't need to
-    ;; sleep at all.
-    0)
    ((not (empty-deque? (atomic-box-ref (scheduler-runqueue sched))))
-    ;; Likewise, don't sleep if there are fibers in the runqueue
-    ;; already.
+    ;; Don't sleep if there are fibers in the runqueue already.
     0)
    ((psq-empty? (scheduler-timers sched))
     -1)
@@ -279,22 +267,15 @@
              (thunk)
              (run-timers timers)))))))))
 
-(define (handle-inbox sched)
-  (for-each (match-lambda
-              ((fiber . thunk)
-               (resume-fiber fiber thunk)))
-            (atomic-box-swap! (scheduler-inbox sched) '())))
-
 (define (schedule-runnables-for-next-turn sched)
   ;; Called when all runnables from the current turn have been run.
   ;; Note that the there may be runnables already scheduled for the
   ;; next turn; one way this can happen is if a fiber suspended itself
   ;; because it was blocked on a channel, but then another fiber woke
-  ;; it up.  In any case, check the kernel to see if any of the fd's
-  ;; that we are interested in are active, and in that case schedule
-  ;; their corresponding fibers.  Also run any timers that have timed
-  ;; out, and process the inbox that receives requests-to-schedule
-  ;; from remote threads.
+  ;; it up, or if a remote thread scheduled a fiber on this scheduler.
+  ;; In any case, check the kernel to see if any of the fd's that we
+  ;; are interested in are active, and in that case schedule their
+  ;; corresponding fibers.  Also run any timers that have timed out.
   (let ((timeout (scheduler-poll-timeout sched)))
     (unless (and (not (zero? timeout))
                  (zero? (scheduler-active-fd-count sched)))
@@ -306,33 +287,21 @@
                         (schedule-fibers-for-fd fd revents sched)
                         seed))
       (atomic-box-set! (scheduler-inbox-state sched) 'will-check)))
-  (handle-inbox sched)
   (run-timers sched))
 
 (define* (run-fiber fiber)
-  (when (eq? (fiber-state fiber) 'runnable)
-    (parameterize ((current-fiber fiber))
-      (call-with-prompt
-       (scheduler-prompt-tag (fiber-scheduler fiber))
-       (lambda ()
-         (let ((thunk (fiber-data fiber)))
-           (set-fiber-state! fiber 'running)
-           (set-fiber-data! fiber #f)
-           (thunk)))
-       (lambda (k after-suspend)
-         (set-fiber-state! fiber 'suspended)
-         (set-fiber-data! fiber k)
-         (after-suspend fiber))))))
+  (parameterize ((current-fiber fiber))
+    (call-with-prompt
+        (scheduler-prompt-tag (fiber-scheduler fiber))
+      (lambda ()
+        (let ((thunk (fiber-data fiber)))
+          (set-fiber-data! fiber #f)
+          (thunk)))
+      (lambda (k after-suspend)
+        (set-fiber-data! fiber k)
+        (after-suspend fiber)))))
 
-(define (scheduler-finished? sched)
-  (let/ec return
-    (define (only-finished-if bool)
-      (if bool #t (return #f)))
-    (only-finished-if (zero? (scheduler-active-fd-count sched)))
-    (only-finished-if (null? (atomic-box-ref (scheduler-inbox sched))))
-    (only-finished-if (psq-empty? (scheduler-timers sched)))))
-
-(define* (run-scheduler sched #:key join-fiber)
+(define* (run-scheduler sched)
   (let lp ()
     (schedule-runnables-for-next-turn sched)
     (match (dequeue-all! (scheduler-runqueue sched))
@@ -341,10 +310,9 @@
        ;; got a spurious wakeup.  In any case, this is the place to
        ;; check to see whether the scheduler is really done.
        (cond
-        ((not (scheduler-finished? sched)) (lp))
-        ((not join-fiber) (values))
-        ((not (eq? (fiber-state join-fiber) 'finished)) (lp))
-        (else (apply values (fiber-data join-fiber)))))
+        ((not (zero? (scheduler-active-fd-count sched))) (lp))
+        ((not (psq-empty? (scheduler-timers sched))) (lp))
+        (else (values))))
       (runnables
        (for-each run-fiber runnables)
        (lp)))))
@@ -361,14 +329,9 @@
   (epoll-destroy (scheduler-epfd sched)))
 
 (define (create-fiber sched thunk)
-  (let ((fiber (make-fiber 'suspended sched #f)))
+  (let ((fiber (make-fiber sched #f)))
     (nameset-add! fibers-nameset fiber)
-    (schedule-fiber! fiber
-                     (lambda ()
-                       (call-with-values thunk
-                         (lambda results
-                           (set-fiber-state! fiber 'finished)
-                           (set-fiber-data! fiber results)))))
+    (schedule-fiber! fiber thunk)
     fiber))
 
 (define (kill-fiber fiber)

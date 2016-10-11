@@ -58,13 +58,16 @@
    scheduler
    (parameterize ((current-read-waiter wait-for-readable)
                   (current-write-waiter wait-for-writable))
-     (call-with-values
-         (lambda ()
-           (run-scheduler scheduler
-                          #:join-fiber (and init (spawn-fiber init scheduler))))
-       (lambda vals
-         (unless keep-scheduler? (destroy-scheduler scheduler))
-         (apply values vals))))))
+     (let ((ret #f))
+       (spawn-fiber (lambda ()
+                      (call-with-values (or init values)
+                        (lambda vals (set! ret vals))))
+                    scheduler)
+       (let lp ()
+         (run-scheduler scheduler)
+         (unless ret (lp)))
+       (unless keep-scheduler? (destroy-scheduler scheduler))
+       (apply values ret)))))
 
 (define (require-current-scheduler)
   (or (current-scheduler)
