@@ -40,7 +40,7 @@
             resume-on-timer
 
             create-fiber
-            current-fiber
+            (current-fiber/public . current-fiber)
             kill-fiber
             fiber-scheduler
             fiber-continuation
@@ -148,13 +148,19 @@ some other kernel thread."
   ((scheduler-kernel-thread sched)))
 
 (define current-scheduler (make-parameter #f))
-(define (current-scheduler/public) (current-scheduler))
+(define (current-scheduler/public)
+  "Return the current scheduler, or @code{#f} if no scheduler is
+current."
+  (current-scheduler))
 (define (make-source events expiry fiber) (vector events expiry fiber))
 (define (source-events s) (vector-ref s 0))
 (define (source-expiry s) (vector-ref s 1))
 (define (source-fiber s) (vector-ref s 2))
 
 (define current-fiber (make-parameter #f))
+(define (current-fiber/public)
+  "Return the current fiber, or @code{#f} if no fiber is current."
+  (current-fiber))
 
 (define (schedule-fiber! fiber thunk)
   ;; The fiber will be resumed at most once, and we are the ones that
@@ -371,6 +377,12 @@ becomes writable."
   (resume-on-fd-events fd EPOLLOUT fiber))
 
 (define (resume-on-timer fiber expiry get-thunk)
+  "Arrange to resume @var{fiber} when the absolute real time is
+greater than or equal to @var{expiry}, expressed in internal time
+units.  The fiber will be resumed with the result of calling
+@var{get-thunk}.  If @var{get-thunk} returns @code{#f}, that indicates
+that some other operation performed this operation first, and so no
+resume is performed."
   (let ((sched (fiber-scheduler fiber)))
     (define (maybe-resume)
       (let ((thunk (get-thunk)))

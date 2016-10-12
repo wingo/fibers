@@ -24,17 +24,10 @@
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
-  #:export ((get-current-fiber . current-fiber)
-            run-fibers
-            spawn-fiber
-            kill-fiber)
-  #:re-export (sleep))
-
-;; A thunk and not a parameter to prevent users from using it as a
-;; parameter.
-(define (get-current-fiber)
-  "Return the current fiber, or @code{#f} if no fiber is current."
-  (current-fiber))
+  #:export (run-fibers
+            spawn-fiber)
+  #:re-export (current-fiber
+               sleep))
 
 (define (wait-for-readable port)
   (suspend-current-fiber
@@ -71,6 +64,3 @@
 
 (define* (spawn-fiber thunk #:optional (sched (require-current-scheduler)))
   (create-fiber sched thunk))
-
-(define (kill-fiber fiber)
-  (pk 'unimplemented-kill-fiber fiber))
