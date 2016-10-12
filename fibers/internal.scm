@@ -294,8 +294,7 @@ Return zero values."
 The fiber will be scheduled on the next turn."
   (let ((fiber (make-fiber sched #f)))
     (nameset-add! fibers-nameset fiber)
-    (schedule-fiber! fiber thunk)
-    fiber))
+    (schedule-fiber! fiber thunk)))
 
 (define (kill-fiber fiber)
   "Try to kill @var{fiber}, causing it to raise an exception.  Note
