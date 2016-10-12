@@ -57,10 +57,11 @@
        (values read-pipe write-pipe)))))
 
 (define-record-type <epoll>
-  (make-epoll fd eventsv state wake-read-pipe wake-write-pipe)
+  (make-epoll fd eventsv maxevents state wake-read-pipe wake-write-pipe)
   epoll?
   (fd epoll-fd set-epoll-fd!)
   (eventsv epoll-eventsv set-epoll-eventsv!)
+  (maxevents epoll-maxevents set-epoll-maxevents!)
   ;; atomic box of either 'waiting, 'not-waiting or 'dead
   (state epoll-state)
   (wake-read-pipe epoll-wake-read-pipe)
@@ -87,12 +88,12 @@
       (pump-epoll-guardian))))
 (add-hook! after-gc-hook pump-epoll-guardian)
 
-(define* (epoll-create #:key (close-on-exec? #t))
+(define* (epoll-create #:key (close-on-exec? #t) (maxevents 8))
   (call-with-values (lambda () (make-wake-pipe))
     (lambda (read-pipe write-pipe)
       (let* ((state (make-atomic-box 'not-waiting))
-             (epoll (make-epoll (primitive-epoll-create close-on-exec?) #f
-                                state read-pipe write-pipe)))
+             (epoll (make-epoll (primitive-epoll-create close-on-exec?)
+                                #f maxevents state read-pipe write-pipe)))
         (epoll-guardian epoll)
         (epoll-add! epoll (fileno read-pipe) EPOLLIN)
         epoll))))
@@ -143,13 +144,19 @@ epoll wait (if appropriate)."
           (set-epoll-eventsv! epoll v)
           v))))
 
-(define* (epoll epoll #:optional maxevents (timeout-fn (lambda () -1))
-                #:key (folder epoll-default-folder) (seed '()))
+(define* (epoll epoll #:key (get-timeout (lambda () -1))
+                (folder epoll-default-folder) (seed '()))
   (atomic-box-set! (epoll-state epoll) 'waiting)
-  (let* ((eventsv (ensure-epoll-eventsv epoll maxevents))
-         (n (primitive-epoll-wait (epoll-fd epoll) eventsv (timeout-fn)))
+  (let* ((maxevents (epoll-maxevents epoll))
+         (eventsv (ensure-epoll-eventsv epoll maxevents))
+         (n (primitive-epoll-wait (epoll-fd epoll) eventsv (get-timeout)))
          (read-pipe (epoll-wake-read-pipe epoll))
          (read-pipe-fd (fileno read-pipe)))
+    ;; If we received `maxevents' events, it means that probably there
+    ;; are more active fd's in the queue that we were unable to
+    ;; receive.  Expand our event buffer in that case.
+    (when (= n maxevents)
+      (set-epoll-maxevents! epoll (* maxevents 2)))
     (atomic-box-set! (epoll-state epoll) 'not-waiting)
     (let lp ((seed seed) (i 0))
       (if (< i n)

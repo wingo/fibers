@@ -109,8 +109,8 @@
         (runqueue (make-atomic-box (make-empty-deque)))
         (sources (make-hash-table))
         (timers (make-psq (match-lambda*
-                              (((t1 . c1) (t2 . c2)) (< t1 t2)))
-                            <))
+                            (((t1 . c1) (t2 . c2)) (< t1 t2)))
+                          <))
         (kernel-thread (make-atomic-parameter #f)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
                                   runqueue sources timers kernel-thread)))
@@ -223,8 +223,7 @@
   ;; are interested in are active, and in that case schedule their
   ;; corresponding fibers.  Also run any timers that have timed out.
   (epoll (scheduler-epfd sched)
-         32                           ; maxevents
-         (lambda () (scheduler-poll-timeout sched))
+         #:get-timeout (lambda () (scheduler-poll-timeout sched))
          #:folder (lambda (fd revents seed)
                     (schedule-fibers-for-fd fd revents sched)
                     seed))
