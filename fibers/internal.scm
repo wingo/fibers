@@ -81,7 +81,6 @@
   ;; atomic parameter of thread
   (kernel-thread scheduler-kernel-thread))
 
-;; fixme: prevent fibers from running multiple times in a turn
 (define-record-type <fiber>
   (make-fiber scheduler data)
   fiber?
@@ -139,12 +138,6 @@
 (define (source-fiber s) (vector-ref s 2))
 
 (define current-fiber (make-parameter #f))
-
-(define (atomic-box-prepend! box x)
-  (let lp ((tail (atomic-box-ref box)))
-    (let ((tail* (atomic-box-compare-and-swap! box tail (cons x tail))))
-      (unless (eq? tail tail*)
-        (lp tail*)))))
 
 (define (schedule-fiber! fiber thunk)
   ;; The fiber will be resumed at most once, and we are the ones that
