@@ -18,7 +18,6 @@
 ;;;; 
 
 (define-module (fibers)
-  #:use-module (fibers epoll)
   #:use-module (fibers internal)
   #:use-module (fibers repl)
   #:use-module (fibers timers)
@@ -37,17 +36,14 @@
   "Return the current fiber, or @code{#f} if no fiber is current."
   (current-fiber))
 
-(define (wait-for-events port fd events)
-  (let ((revents (suspend-current-fiber
-                  (lambda (fiber)
-                    (add-fd-events! (fiber-scheduler fiber) fd events fiber)))))
-    (unless (zero? (logand revents EPOLLERR))
-      (error "error reading from port" port))))
-
 (define (wait-for-readable port)
-  (wait-for-events port (port-read-wait-fd port) (logior EPOLLIN EPOLLRDHUP)))
+  (suspend-current-fiber
+   (lambda (fiber)
+     (resume-on-readable-fd (port-read-wait-fd port) fiber))))
 (define (wait-for-writable port)
-  (wait-for-events port (port-write-wait-fd port) EPOLLOUT))
+  (suspend-current-fiber
+   (lambda (fiber)
+     (resume-on-writable-fd (port-read-wait-fd port) fiber))))
 
 (define* (run-fibers #:optional (init #f)
                      #:key (scheduler (make-scheduler))

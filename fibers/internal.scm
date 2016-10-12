@@ -34,8 +34,10 @@
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
             run-scheduler
             destroy-scheduler
-            add-fd-events!
-            add-timer!
+
+            resume-on-readable-fd
+            resume-on-writable-fd
+            resume-on-timer
 
             create-fiber
             current-fiber
@@ -332,10 +334,11 @@ from a finalizer thread."
                                       (1- (scheduler-active-fd-count sched)))
       (hashv-remove! sources-table fd))))
 
-(define (add-fd-events! sched fd events fiber)
+(define (resume-on-fd-events fd events fiber)
   "Arrange to resume @var{fiber} when the file descriptor @var{fd} has
 the given @var{events}, expressed as an epoll bitfield."
-  (let ((sources (hashv-ref (scheduler-sources sched) fd)))
+  (let* ((sched (fiber-scheduler fiber))
+         (sources (hashv-ref (scheduler-sources sched) fd)))
     (cond
      (sources
       (set-cdr! sources (cons (make-source events #f fiber) (cdr sources)))
@@ -357,8 +360,22 @@ the given @var{events}, expressed as an epoll bitfield."
       (add-fdes-finalizer! fd (lambda (fd) (finalize-fd sched fd)))
       (epoll-add! (scheduler-epfd sched) fd (logior events EPOLLONESHOT))))))
 
-(define (add-timer! sched thunk expiry)
-  (set-scheduler-timers! sched
-                         (psq-set (scheduler-timers sched)
-                                  (cons expiry thunk)
-                                  expiry)))
+(define (resume-on-readable-fd fd fiber)
+  "Arrange to resume @var{fiber} when the file descriptor @var{fd}
+becomes readable."
+  (resume-on-fd-events fd (logior EPOLLIN EPOLLRDHUP) fiber))
+
+(define (resume-on-writable-fd fd fiber)
+  "Arrange to resume @var{fiber} when the file descriptor @var{fd}
+becomes writable."
+  (resume-on-fd-events fd EPOLLOUT fiber))
+
+(define (resume-on-timer fiber expiry get-thunk)
+  (let ((sched (fiber-scheduler fiber)))
+    (define (maybe-resume)
+      (let ((thunk (get-thunk)))
+        (when thunk (resume-fiber fiber thunk))))
+    (set-scheduler-timers! sched
+                           (psq-set (scheduler-timers sched)
+                                    (cons expiry maybe-resume)
+                                    expiry))))
