@@ -279,7 +279,7 @@ at all.  Operations likewise can be @dfn{performed}@footnote{In CML,
 @dfn{synchronized}.} many times or not at all; performing an operation
 is like calling a function.  The interesting part is that you can
 compose operations via the @code{wrap-operation} and
-@code{choose-operation} combinators.  The former lets you bundle up an
+@code{choice-operation} combinators.  The former lets you bundle up an
 operation and a continuation.  The latter lets you construct an
 operation that chooses over a number of operations.  Calling
 @code{perform-operation} on a choice operation will perform one and
@@ -378,11 +378,14 @@ there are no more fibers waiting to be scheduled.
 @chapter API reference
 
 Fibers is a library built on Guile, consisting of a public interface,
-a channels library, and an internals interface.
+base support for asynchronous operations, implementations of
+operations for channels and timers, and an internals interface.
 
 @menu
 * Using Fibers::        User-facing interface to fibers
+* Operations::          Composable abstractions for concurrency.
 * Channels::            Share memory by communicating.
+* Timers::              Operations on time.
 * Internals::           Scheduler and fiber objects and operations.
 @end menu
 
@@ -406,12 +409,13 @@ returned by the call to @var{init-thunk}.
 
 For example:
 @example
-(run-fibers (lambda () 1)) @result{} 1
+(run-fibers (lambda () 1))
+@result{} 1
+
 (run-fibers
  (lambda ()
    (spawn-fiber (lambda () (display "hey!\n")))))
-  @print{} hey!
-  @result{} #<<fiber> ...>
+@print{} hey!
 @end example
 
 Calling @code{run-fibers} will ensure that Guile's port implementation
@@ -422,7 +426,7 @@ or writes to prevent other fibers from running, pass @code{#f} as the
 @code{#:install-suspendable-ports?} keyword argument.
 
 By default, @code{run-fibers} will create a fresh scheduler.  If you
-happen to have a pre-existing scheduler (because you are used the
+happen to have a pre-existing scheduler (because you used the
 internals interface to create one), you can pass it to
 @code{run-fibers} using the @code{#:scheduler} keyword argument.
 
@@ -460,6 +464,53 @@ the importing module, effectively overriding Guile's ``core''
 definition.
 @end defun
 
+@node Operations
+@section Operations
+
+Operations are first-class abstractions for asynchronous events.
+There are primitive operation types, such as waiting for a timer
+(@pxref{Timers}) or waiting for a message on a channel
+(@pxref{Channels}).  Operations can also be combined and transformed
+using the @code{choice-operation} and @code{wrap-operation} from this module:
+
+@example
+(use-modules (fibers operations))
+@end example
+
+@defun wrap-operation op f
+Given the operation @var{op}, return a new operation that, if and when
+it succeeds, will apply @var{f} to the values yielded by performing
+@var{op}, and yield the result as the values of the wrapped operation.
+@end defun
+
+@defun choice-operation . ops
+Given the operations @var{ops}, return a new operation that if it
+succeeds, will succeed with one and only one of the sub-operations
+@var{ops}.
+@end defun
+
+Finally, once you have an operation, you can perform it using
+@code{perform-operation}.
+
+@defun perform-operation op
+Perform the operation @var{op} and return the resulting values.  If the
+operation cannot complete directly, block until it can complete.
+@end defun
+
+@xref{Introduction}, for more on the ``Concurrent ML'' system that
+introduced the concept of the operation abstraction.
+
+There is also a low-level constructor for other modules that implement
+primitive operation types:
+
+@defun make-base-operation wrap-fn try-fn block-fn
+Make a fresh base operation.
+@end defun
+
+This is a low-level constructor, though; if you ever feel the need to
+call @code{make-base-operation}, make sure you're familiar with the
+Concurrent ML literature.  Godspeed!
+
 @node Channels
 @section Channels
 
@@ -470,31 +521,74 @@ the channels module:
 (use-modules (fibers channels))
 @end example
 
-@defun make-channel [#:queue-size=@code{1}]
-Create and return a fresh channel.  By default the channel will have
-space for one buffered message; pass a larger value as
-@code{#:queue-size} to increase the buffer size.
+@defun make-channel
+Make a fresh channel.
 @end defun
 
 @defun channel? obj
-Return @code{#t} if @var{obj} is a channel, and @code{#f} otherwise.
+Return @code{#t} if @var{obj} is a channel, or @code{#f} otherwise.
+@end defun
+
+@defun put-operation channel message
+Make an operation that if and when it completes will rendezvous with a
+receiver fiber to send @var{message} over @var{channel}.
+@end defun
+
+@defun get-operation channel
+Make an operation that if and when it completes will rendezvous with a
+sender fiber to receive one value from @var{channel}.
 @end defun
 
 @defun put-message channel message
-Send @var{message} on @var{channel}, and return zero values.  If
-@var{channel} is full (i.e., it already @var{queue-size} messages
-queued), block until some other fiber calls @code{get-message} on the
-channel.
+Send @var{message} on @var{channel}, and return zero values.  If there
+is already another fiber waiting to receive a message on this channel,
+give it our message and continue.  Otherwise, block until a receiver
+becomes available.
+
+Equivalent to:
+@example
+(perform-operation (put-operation channel message))
+@end example
 @end defun
 
 @defun get-message channel
-Receive a message from @var{channel}, and return zero values.  If
-@var{channel} is empty (i.e., there are no messages in its queue),
-block until some other fiber calls @code{put-message} on the channel.
+Receive a message from @var{channel} and return it.  If there is already
+another fiber waiting to send a message on this channel, take its
+message directly.  Otherwise, block until a sender becomes available.
+
+Equivalent to:
+@example
+(perform-operation (get-operation channel))
+@end example
 @end defun
 
 Channels are thread-safe; you can use them to send and receive values
 between fibers on different kernel threads.
+
+@node Timers
+@section Timers
+
+Timers are a kind of operation that, you guessed it, let you wait
+until a certain time.
+
+@example
+(use-modules (fibers timers))
+@end example
+
+@defun wait-operation seconds
+Make an operation that will succeed with no values when @var{seconds}
+have elapsed.
+@end defun
+
+@defun timer-operation expiry
+Make an operation that will succeed when the current time is greater
+than or equal to @var{expiry}, expressed in internal time units.  The
+operation will succeed with no values.
+@end defun
+
+@defun sleep seconds
+Block the calling fiber until @var{seconds} have elapsed.
+@end defun
 
 @node Internals
 @section Internals
@@ -511,44 +605,112 @@ point, but for now this section is a stub.
 @end example
 
 @defun make-scheduler
+Make a new scheduler in which to run fibers.
 @end defun
 
-@defvar current-scheduler
-@end defvar
+@defspec with-scheduler scheduler body ...
+Evaluate @code{(begin @var{body} ...)} in an environment in which
+@var{scheduler} is bound to the current kernel thread and marked as
+current.  Signal an error if @var{scheduler} is already running in some
+other kernel thread.
+@end defspec
 
-@defun run-scheduler sched [#:join-fiber]
+@defun scheduler-name sched
+Return the name of @var{sched}.
+@end defun
+
+@defun run-scheduler sched
+Run @var{sched} until there are no more fibers ready to run, no file
+descriptors being waited on, and no more timers pending to run.  Return
+zero values.
 @end defun
 
 @defun destroy-scheduler sched
+Release any resources associated with @var{sched}.
 @end defun
 
-@defun add-fd-events! sched fd events fiber
+@defun resume-on-readable-fd fd fiber
+Arrange to resume @var{fiber} when the file descriptor @var{fd} becomes
+readable.
 @end defun
 
-@defun add-sleeper! sched fiber seconds
+@defun resume-on-writable-fd fd fiber
+Arrange to resume @var{fiber} when the file descriptor @var{fd} becomes
+writable.
+@end defun
+
+@defun resume-on-timer fiber expiry get-thunk
+Arrange to resume @var{fiber} when the absolute real time is greater
+than or equal to @var{expiry}, expressed in internal time units.  The
+fiber will be resumed with the result of calling @var{get-thunk}.  If
+@var{get-thunk} returns @code{#f}, that indicates that some other
+operation performed this operation first, and so no resume is
+performed.
 @end defun
 
 @defun create-fiber sched thunk
+Spawn a new fiber in @var{sched} with the continuation @var{thunk}.  The
+fiber will be scheduled on the next turn.
 @end defun
 
 @defvar current-fiber
+Return the current fiber, or @code{#f} if no fiber is current.
 @end defvar
 
 @defun kill-fiber fiber
+Try to kill @var{fiber}, causing it to raise an exception.  Note that
+this is currently unimplemented!
 @end defun
 
-@defspec fiber-scheduler
-@end defspec
+@defun fiber-scheduler fiber
+Return the scheduler of @var{fiber}.
+@end defun
 
-@defspec fiber-state
-@end defspec
+@defun fiber-continuation
+Return the continuation of @var{fiber}, or @code{#f} if @var{fiber} is
+not suspended.
+@end defun
+
+@defun fold-all-schedulers f seed
+Fold @var{f} over the set of known schedulers.  @var{f} will be invoked
+as @code{(@var{f} @var{name} @var{scheduler} @var{seed})}.
+@end defun
+
+@defun scheduler-by-name name
+Return the scheduler named @var{name}, or @code{#f} if no scheduler of
+that name is known.
+@end defun
+
+@defun fold-all-fibers f seed
+Fold @var{f} over the set of known fibers.  @var{f} will be invoked as
+@code{(@var{f} @var{name} @var{fiber} @var{seed})}.
+@end defun
+
+@defun fiber-by-name name
+Return the fiber named @var{name}, or @code{#f} if no fiber of that name
+is known.
+@end defun
 
 @defun suspend-current-fiber [after-suspend]
+Suspend the current fiber.  Call the optional @var{after-suspend}
+callback, if present, with the suspended thread as its argument.
 @end defun
 
 @defun resume-fiber fiber thunk
+Resume @var{fiber}, adding it to the run queue of its scheduler.  The
+fiber will start by applying @var{thunk}.  A fiber @emph{must} only be
+resumed when it is suspended.  This function is thread-safe even if
+@var{fiber} is running on a remote scheduler.
 @end defun
 
+@defun current-scheduler
+Return the current scheduler, or @code{#f} if no scheduler is current.
+@end defun
+
+@defun scheduler-kernel-thread sched
+Return the kernel thread on which @var{sched} is running, or @code{#f}
+if @var{sched} is not running.
+@end defun
 
 @node Pitfalls
 @chapter Pitfalls
