@@ -23,7 +23,7 @@
 ;;; This implementation differs from the paper in a few ways:
 ;;;
 ;;; * Superficially, We use the term "operation" instead of "event".
-;;;   We say "wrap-operation" instead of "wrap", "choose-operation"
+;;;   We say "wrap-operation" instead of "wrap", "choice-operation"
 ;;;   instead of "choose", and "perform-operation" instead of "sync".
 ;;;
 ;;; * For the moment, this is an implementation of "primitive CML"
@@ -53,7 +53,7 @@
   #:use-module (ice-9 match)
   #:use-module (fibers internal)
   #:export (wrap-operation
-            choose-operation
+            choice-operation
             perform-operation
 
             make-base-operation))
@@ -101,7 +101,7 @@ operation."
            (lp (1+ i))))
        (make-choice-operation base-ops*)))))
 
-(define (choose-operation . ops)
+(define (choice-operation . ops)
   "Given the operations @var{ops}, return a new operation that if it
 succeeds, will succeed with one and only one of the sub-operations
 @var{ops}."
