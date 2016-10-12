@@ -108,7 +108,7 @@ If SCHED is given, limit to fibers bound to the given fold."
            ;; at foo.scm:32:4".
            (when (or (not sched) (eq? (fiber-scheduler fiber) sched))
              (format #t "~a ~8t~a\n" id
-                     (if (fiber-data fiber) "(suspended)" "")))))
+                     (if (fiber-continuation fiber) "(suspended)" "")))))
         fibers)))))
 
 (define-meta-command ((spawn-fiber fibers) repl (form) #:optional sched)

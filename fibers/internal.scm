@@ -41,7 +41,7 @@
             current-fiber
             kill-fiber
             fiber-scheduler
-            fiber-data
+            fiber-continuation
 
             fold-all-schedulers
             scheduler-by-name
@@ -82,14 +82,14 @@
   (kernel-thread scheduler-kernel-thread))
 
 (define-record-type <fiber>
-  (make-fiber scheduler data)
+  (make-fiber scheduler continuation)
   fiber?
   ;; The scheduler that a fiber runs in.  As a scheduler only runs in
   ;; one kernel thread, this binds a fiber to a kernel thread.
   (scheduler fiber-scheduler)
-  ;; State-specific data.  For runnable, a thunk; for running, nothing;
-  ;; for suspended, a continuation; for finished, a list of values.
-  (data fiber-data set-fiber-data!))
+  ;; What the fiber should do when it resumes, or #f if the fiber is
+  ;; currently running.
+  (continuation fiber-continuation set-fiber-continuation!))
 
 (define (make-atomic-parameter init)
   (let ((box (make-atomic-box init)))
@@ -145,7 +145,7 @@
   ;; fiber to the runqueue is an atomic operation with SEQ_CST
   ;; ordering, so that will make sure this operation is visible even
   ;; for a fiber scheduled on a remote thread.
-  (set-fiber-data! fiber thunk)
+  (set-fiber-continuation! fiber thunk)
   (let ((sched (fiber-scheduler fiber)))
     (enqueue! (scheduler-runqueue sched) fiber)
     (unless (eq? sched (current-scheduler))
@@ -235,11 +235,11 @@
     (call-with-prompt
         (scheduler-prompt-tag (fiber-scheduler fiber))
       (lambda ()
-        (let ((thunk (fiber-data fiber)))
-          (set-fiber-data! fiber #f)
+        (let ((thunk (fiber-continuation fiber)))
+          (set-fiber-continuation! fiber #f)
           (thunk)))
       (lambda (k after-suspend)
-        (set-fiber-data! fiber k)
+        (set-fiber-continuation! fiber k)
         (after-suspend fiber)))))
 
 (define* (run-scheduler sched)
@@ -282,7 +282,7 @@
                     after-suspend)))
 
 (define* (resume-fiber fiber thunk)
-  (let* ((cont (fiber-data fiber))
+  (let* ((cont (fiber-continuation fiber))
          (thunk (if cont (lambda () (cont thunk)) thunk)))
     (schedule-fiber! fiber thunk)))
 
