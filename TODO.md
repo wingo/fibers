@@ -37,7 +37,7 @@ very performant.
 scheme@(guile-user)> ,fkill 1
 ```
 
-Also `,fcancel` I guess, the difference being that killing raises and
+Also `,fcancel` I guess, the difference being that killing raises an
 exception and cancelling is like SIGKILL.
 
 ### `,fiber N`
@@ -57,17 +57,11 @@ to get the dynamic bindings too, methinks...
 
 Currently fibers have no priority.  Does that matter?
 
-## Fiber join
+## Fiber join?
 
-First, spawn-fiber needs to return the new fiber, and we need to test
-that current-fiber works.  Then join-fiber on a not-finished fiber
-should suspend the calling fiber, waking it up when the callee
-finishes.
-
-Do fibers each need a field for other fibers that want to join on
-them?  Are there other ways?  I suspect most fibers will not be joined
-and just GC'd when finished or stuck, so maybe a side table is the
-right solution.
+Currently there is no ability to join a fiber.  I don't know if this
+matters or not though.  Certainly you can build this facility by
+wrapping the fiber's continuation when you create it.
 
 ## Process death notifications
 
@@ -114,12 +108,6 @@ We need to provide API for things like:
 ## When would we want to migrate a fiber to a different thread?
 
 Also, how would we do it?
-
-## Prevent scheduler from being active in multiple threads at once
-
-A scheduler assumes that it can directly mutate some of its data
-structures, meaning that it should never run on multiple threads at
-once.
 
 ## `select()` or similar
 

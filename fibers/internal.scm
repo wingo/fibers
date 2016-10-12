@@ -55,13 +55,21 @@
 (define-once schedulers-nameset (make-nameset))
 
 (define (fold-all-schedulers f seed)
+  "Fold @var{f} over the set of known schedulers.  @var{f} will be
+invoked as @code{(@var{f} @var{name} @var{scheduler} @var{seed})}."
   (nameset-fold f schedulers-nameset seed))
 (define (scheduler-by-name name)
+  "Return the scheduler named @var{name}, or @code{#f} if no scheduler
+of that name is known."
   (nameset-ref schedulers-nameset name))
 
 (define (fold-all-fibers f seed)
+  "Fold @var{f} over the set of known fibers.  @var{f} will be
+invoked as @code{(@var{f} @var{name} @var{fiber} @var{seed})}."
   (nameset-fold f fibers-nameset seed))
 (define (fiber-by-name name)
+  "Return the fiber named @var{name}, or @code{#f} if no fiber of that
+name is known."
   (nameset-ref fibers-nameset name))
 
 (define-record-type <scheduler>
@@ -103,6 +111,7 @@
                (error "owned by other thread" prev))))))))
 
 (define (make-scheduler)
+  "Make a new scheduler in which to run fibers."
   (let ((epfd (epoll-create))
         (active-fd-count 0)
         (prompt-tag (make-prompt-tag "fibers"))
@@ -118,6 +127,10 @@
       sched)))
 
 (define-syntax-rule (with-scheduler scheduler body ...)
+  "Evaluate @code{(begin @var{body} ...)} in an environment in which
+@var{scheduler} is bound to the current kernel thread and marked as
+current.  Signal an error if @var{scheduler} is already running in
+some other kernel thread."
   (let ((sched scheduler))
     (dynamic-wind (lambda ()
                     ((scheduler-kernel-thread sched) (current-thread)))
@@ -128,6 +141,8 @@
                     ((scheduler-kernel-thread sched) #f)))))
 
 (define (scheduler-kernel-thread/public sched)
+  "Return the kernel thread on which @var{sched} is running, or
+@code{#f} if @var{sched} is not running."
   ((scheduler-kernel-thread sched)))
 
 (define current-scheduler (make-parameter #f))
@@ -242,6 +257,9 @@
         (after-suspend fiber)))))
 
 (define* (run-scheduler sched)
+  "Run @var{sched} until there are no more fibers ready to run, no
+file descriptors being waited on, and no more timers pending to run.
+Return zero values."
   (let lp ()
     (schedule-runnables-for-next-turn sched)
     (match (dequeue-all! (scheduler-runqueue sched))
@@ -258,18 +276,23 @@
        (lp)))))
 
 (define (destroy-scheduler sched)
+  "Release any resources associated with @var{sched}."
   #;
   (for-each kill-fiber (list-copy (scheduler-fibers sched)))
   (epoll-destroy (scheduler-epfd sched)))
 
 (define (create-fiber sched thunk)
+  "Spawn a new fiber in @var{sched} with the continuation @var{thunk}.
+The fiber will be scheduled on the next turn."
   (let ((fiber (make-fiber sched #f)))
     (nameset-add! fibers-nameset fiber)
     (schedule-fiber! fiber thunk)
     fiber))
 
 (define (kill-fiber fiber)
-  (pk 'kill-fiber fiber))
+  "Try to kill @var{fiber}, causing it to raise an exception.  Note
+that this is currently unimplemented!"
+  (error "kill-fiber is unimplemented"))
 
 ;; The AFTER-SUSPEND thunk allows the user to suspend the current
 ;; fiber, saving its state, and then perform some other nonlocal
@@ -277,13 +300,19 @@
 ;;
 (define* (suspend-current-fiber #:optional
                                 (after-suspend (lambda (fiber) #f)))
+  "Suspend the current fiber.  Call the optional @var{after-suspend}
+callback, if present, with the suspended thread as its argument."
   ((abort-to-prompt (scheduler-prompt-tag (current-scheduler))
                     after-suspend)))
 
 (define* (resume-fiber fiber thunk)
-  (let* ((cont (fiber-continuation fiber))
-         (thunk (if cont (lambda () (cont thunk)) thunk)))
-    (schedule-fiber! fiber thunk)))
+  "Resume @var{fiber}, adding it to the run queue of its scheduler.
+The fiber will start by applying @var{thunk}.  A fiber @emph{must}
+only be resumed when it is suspended.  This function is thread-safe
+even if @var{fiber} is running on a remote scheduler."
+  (let ((cont (fiber-continuation fiber)))
+    (unless cont (error "invalid fiber" fiber))
+    (schedule-fiber! fiber (lambda () (cont thunk)))))
 
 (define (finalize-fd sched fd)
   "Remove data associated with @var{fd} from the scheduler @var{ctx}.
@@ -304,6 +333,8 @@ from a finalizer thread."
       (hashv-remove! sources-table fd))))
 
 (define (add-fd-events! sched fd events fiber)
+  "Arrange to resume @var{fiber} when the file descriptor @var{fd} has
+the given @var{events}, expressed as an epoll bitfield."
   (let ((sources (hashv-ref (scheduler-sources sched) fd)))
     (cond
      (sources

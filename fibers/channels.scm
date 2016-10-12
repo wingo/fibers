@@ -35,6 +35,7 @@
   #:use-module (fibers internal)
   #:use-module (fibers operations)
   #:export (make-channel
+            channel?
             put-operation
             get-operation
             put-message
@@ -49,10 +50,13 @@
   (putq channel-putq))
 
 (define (make-channel)
+  "Make a fresh channel."
   (%make-channel (make-atomic-box (make-empty-deque))
                  (make-atomic-box (make-empty-deque))))
 
-(define (put-operation channel msg)
+(define (put-operation channel message)
+  "Make an operation that if and when it completes will rendezvous
+with a receiver fiber to send @var{message} over @var{channel}."
   (match channel
     (($ <channel> getq-box putq-box)
      (define (try-fn)
@@ -83,8 +87,8 @@
                           (maybe-commit)
                           (resume-fiber get-fiber (if get-wrap-fn
                                                       (lambda ()
-                                                        (get-wrap-fn msg))
-                                                      (lambda () msg)))
+                                                        (get-wrap-fn message))
+                                                      (lambda () message)))
                           ;; Continue directly.
                           (lambda () (values)))
                          ;; Get operation temporarily busy; try again.
@@ -104,7 +108,7 @@
            (#(get-flag get-fiber get-wrap-fn)
             (not (eq? put-flag get-flag)))))
        ;; First, publish this put operation.
-       (enqueue! putq-box (vector put-flag put-fiber put-wrap-fn msg))
+       (enqueue! putq-box (vector put-flag put-fiber put-wrap-fn message))
        ;; In the try phase, we scanned the getq for a get operation,
        ;; but we were unable to perform any of them.  Since then,
        ;; there might be a new get operation on the queue.  However
@@ -149,8 +153,8 @@
                              (maybe-commit)
                              (resume-fiber get-fiber
                                            (if get-wrap-fn
-                                               (lambda () (get-wrap-fn msg))
-                                               (lambda () msg)))
+                                               (lambda () (get-wrap-fn message))
+                                               (lambda () message)))
                              (resume-fiber put-fiber (or put-wrap-fn values))
                              (values))
                             ('C
@@ -174,6 +178,8 @@
      (make-base-operation #f try-fn block-fn))))
 
 (define (get-operation channel)
+  "Make an operation that if and when it completes will rendezvous
+with a sender fiber to receive one value from @var{channel}."
   (match channel
     (($ <channel> getq-box putq-box)
      (define (try-fn)
@@ -190,7 +196,7 @@
              ;; Return #f if the putq was empty.
              (and putq*
                   (match item
-                    (#(put-flag put-fiber put-wrap-fn msg)
+                    (#(put-flag put-fiber put-wrap-fn message)
                      (let spin ()
                        (match (atomic-box-compare-and-swap! put-flag 'W 'S)
                          ('W
@@ -202,7 +208,7 @@
                           (maybe-commit)
                           (resume-fiber put-fiber (or put-wrap-fn values))
                           ;; Continue directly.
-                          (lambda () msg))
+                          (lambda () message))
                          ;; Put operation temporarily busy; try again.
                          ('C (spin))
                          ;; Put operation already synchronized; pop it
@@ -217,7 +223,7 @@
        ;; channel's getq.
        (define (not-me? item)
          (match item
-           (#(put-flag put-fiber put-wrap-fn msg)
+           (#(put-flag put-fiber put-wrap-fn message)
             (not (eq? get-flag put-flag)))))
        ;; First, publish this get operation.
        (enqueue! getq-box (vector get-flag get-fiber get-wrap-fn))
@@ -243,7 +249,7 @@
              ;; We only have to service the putq if it is non-empty.
              (when putq*
                (match item
-                 (#(put-flag put-fiber put-wrap-fn msg)
+                 (#(put-flag put-fiber put-wrap-fn message)
                   (match (atomic-box-ref put-flag)
                     ('S
                      ;; This put operation has already synchronized;
@@ -266,8 +272,8 @@
                              (maybe-commit)
                              (resume-fiber get-fiber
                                            (if get-wrap-fn
-                                               (lambda () (get-wrap-fn msg))
-                                               (lambda () msg)))
+                                               (lambda () (get-wrap-fn message))
+                                               (lambda () message)))
                              (resume-fiber put-fiber (or put-wrap-fn values))
                              (values))
                             ('C
@@ -290,8 +296,16 @@
                           (values)))))))))))))
      (make-base-operation #f try-fn block-fn))))
 
-(define (put-message ch exp)
-  (perform-operation (put-operation ch exp)))
+(define (put-message channel message)
+  "Send @var{message} on @var{channel}, and return zero values.  If
+there is already another fiber waiting to receive a message on this
+channel, give it our message and continue.  Otherwise, block until a
+receiver becomes available."
+  (perform-operation (put-operation channel message)))
 
-(define (get-message ch)
-  (perform-operation (get-operation ch)))
+(define (get-message channel)
+  "Receive a message from @var{channel} and return it.  If there is
+already another fiber waiting to send a message on this channel, take
+its message directly.  Otherwise, block until a sender becomes
+available."
+  (perform-operation (get-operation channel)))

@@ -78,6 +78,10 @@
   (base-ops choice-op-base-ops))
 
 (define (wrap-operation op f)
+  "Given the operation @var{op}, return a new operation that, if and
+when it succeeds, will apply @var{f} to the values yielded by
+performing @var{op}, and yield the result as the values of the wrapped
+operation."
   (match op
     (($ <base-op> wrap-fn try-fn block-fn)
      (make-base-operation (match wrap-fn
@@ -98,6 +102,9 @@
        (make-choice-operation base-ops*)))))
 
 (define (choose-operation . ops)
+  "Given the operations @var{ops}, return a new operation that if it
+succeeds, will succeed with one and only one of the sub-operations
+@var{ops}."
   (define (flatten ops)
     (match ops
       (() '())
@@ -111,6 +118,8 @@
     (base-ops (make-choice-operation (list->vector base-ops)))))
 
 (define (perform-operation op)
+  "Perform the operation @var{op} and return the resulting values.  If
+the operation cannot complete directly, block until it can complete."
   (define (block)
     (suspend-current-fiber
      (lambda (fiber)

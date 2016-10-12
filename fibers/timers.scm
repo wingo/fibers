@@ -27,6 +27,9 @@
   #:replace (sleep))
 
 (define (timer-operation expiry)
+  "Make an operation that will succeed when the current time is
+greater than or equal to @var{expiry}, expressed in internal time
+units.  The operation will succeed with no values."
   (make-base-operation #f
                        (lambda ()
                          (and (< expiry (get-internal-real-time))
@@ -42,10 +45,13 @@
                                      expiry))))
 
 (define (wait-operation seconds)
+  "Make an operation that will succeed with no values when
+@var{seconds} have elapsed."
   (timer-operation
    (+ (get-internal-real-time)
       (inexact->exact
        (round (* seconds internal-time-units-per-second))))))
 
 (define (sleep seconds)
+  "Block the calling fiber until @var{seconds} have elapsed."
   (perform-operation (wait-operation seconds)))
