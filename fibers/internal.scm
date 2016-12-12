@@ -24,6 +24,7 @@
   #:use-module (fibers psq)
   #:use-module (fibers nameset)
   #:use-module (ice-9 atomic)
+  #:use-module (ice-9 control)
   #:use-module (ice-9 match)
   #:use-module (ice-9 fdes-finalizers)
   #:use-module ((ice-9 threads) #:select (current-thread))
@@ -302,6 +303,10 @@ The fiber will be scheduled on the next turn."
 that this is currently unimplemented!"
   (error "kill-fiber is unimplemented"))
 
+;; Shim for Guile 2.1.5.
+(unless (defined? 'suspendable-continuation?)
+  (define! 'suspendable-continuation? (lambda (tag) #t)))
+
 ;; The AFTER-SUSPEND thunk allows the user to suspend the current
 ;; fiber, saving its state, and then perform some other nonlocal
 ;; control flow.
@@ -310,8 +315,10 @@ that this is currently unimplemented!"
                                 (after-suspend (lambda (fiber) #f)))
   "Suspend the current fiber.  Call the optional @var{after-suspend}
 callback, if present, with the suspended thread as its argument."
-  ((abort-to-prompt (scheduler-prompt-tag (current-scheduler))
-                    after-suspend)))
+  (let ((tag (scheduler-prompt-tag (current-scheduler))))
+    (unless (suspendable-continuation? tag)
+      (error "Attempt to suspend fiber within continuation barrier"))
+    ((abort-to-prompt tag after-suspend))))
 
 (define* (resume-fiber fiber thunk)
   "Resume @var{fiber}, adding it to the run queue of its scheduler.
