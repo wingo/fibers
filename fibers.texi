@@ -437,7 +437,8 @@ explicitly pass @code{#t} as the @code{#:keep-scheduler?} keyword
 argument.
 @end defun
 
-@defun spawn-fiber thunk [#:scheduler=@code{(require-current-scheduler)}]
+@defun spawn-fiber thunk [scheduler=@code{(require-current-scheduler)}] @
+       [#:dynamic-state=@code{(current-dynamic-state)}]
 Spawn a new fiber that will run @var{thunk}.  Return the new fiber.
 The new fiber will run concurrently with other fibers.
 
@@ -450,6 +451,11 @@ keyword argument.
 Currently, fibers will only ever be run within the scheduler to which
 they are first added, which effectively pins them to a single kernel
 thread.  This limitation may be relaxed in the future.
+
+The fiber will inherit the fluid--value associations (the dynamic
+state) in place when @code{spawn-fiber} is called.  Any
+@code{fluid-set!} or parameter set within the fiber will not affect
+fluid or parameter bindings outside the fiber.
 @end defun
 
 @defun current-fiber
