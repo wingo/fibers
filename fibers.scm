@@ -39,7 +39,7 @@
      (resume-on-writable-fd (port-read-wait-fd port) fiber))))
 
 (define* (run-fibers #:optional (init #f)
-                     #:key (scheduler (make-scheduler))
+                     #:key (hz 0) (scheduler (make-scheduler #:hz hz))
                      (install-suspendable-ports? #t)
                      (keep-scheduler? (eq? scheduler (current-scheduler))))
   (when install-suspendable-ports? (install-suspendable-ports!))

@@ -348,13 +348,14 @@ backpressure support than Erlang, blocking when no receiver is
 available to handle a message instead of letting the sender keep
 sending many messages.
 
-On the other hand, currently fibers are not preemptively scheduled.  A
-fiber will only suspend when it would block on channel receive or
-send, or on read or write on a port.  This would be an OK point in the
-design space if only one kernel thread could be running fibers at
-once, as in Node.js.  However given that this is not the case, Fibers
-does not have many of the concurrency invariants that such systems
-enjoy, so perhaps we should support preemption in the future.
+On the other hand, currently fibers default to not being preemptively
+scheduled.  A fiber will only suspend when it would block on channel
+receive or send, or on read or write on a port.  This would be an OK
+point in the design space if only one kernel thread could be running
+fibers at once, as in Node.js.  However given that this is not the
+case, Fibers does not have many of the concurrency invariants that
+such systems enjoy, so perhaps we should default to enabling
+preemption.
 
 To avoid starvation, a fiber can only run once within a ``turn''.
 Each turn starts with a poll on file descriptors of interest and marks
@@ -402,7 +403,7 @@ import the @code{(fibers)} module:
 To create a new fibers scheduler and run it in the current Guile
 thread, use @code{run-fibers}.
 
-@defun run-fibers [init-thunk=@code{#f}] [#:install-suspendable-ports?=@code{#t}] [#:scheduler=@code{(make-scheduler)}] [#:keep-scheduler?]
+@defun run-fibers [init-thunk=@code{#f}] [#:install-suspendable-ports?=@code{#t}] [#:scheduler=@code{(make-scheduler)}] [#:keep-scheduler?] [#:hz=0]
 Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
 until the scheduler has no more runnable fibers.  Return the value(s)
 returned by the call to @var{init-thunk}.
@@ -428,7 +429,12 @@ or writes to prevent other fibers from running, pass @code{#f} as the
 By default, @code{run-fibers} will create a fresh scheduler.  If you
 happen to have a pre-existing scheduler (because you used the
 internals interface to create one), you can pass it to
-@code{run-fibers} using the @code{#:scheduler} keyword argument.
+@code{run-fibers} using the @code{#:scheduler} keyword argument.  If
+@code{run-fibers} creates a new scheduler, it will pass @var{hz} to
+the @code{make-scheduler} invocation.  By default @var{hz} is 0,
+indicating that the scheduler should not be pre-emptive.  Pass a
+higher value to cause computationally expensive tasks to be preempted
+if possible.
 
 The scheduler will be destroyed when @code{run-fibers} finishes,
 unless the scheduler was already ``current'' (@pxref{Internals}).  If
@@ -610,8 +616,12 @@ point, but for now this section is a stub.
 (use-modules (fibers internal))
 @end example
 
-@defun make-scheduler
-Make a new scheduler in which to run fibers.
+@defun make-scheduler [#:hz hz=0]
+Make a new scheduler in which to run fibers.  @var{hz} indicates the
+frequency at which fibers should be preempted.  By default @var{hz} is
+0, indicating that the scheduler should not be preempt fibers that hog
+the CPU.  Note that preemption will only occur if the fiber can
+actually be suspended; @xref{Barriers}, for more information.
 @end defun
 
 @defspec with-scheduler scheduler body ...

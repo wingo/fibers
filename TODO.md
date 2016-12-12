@@ -71,11 +71,6 @@ channels would be sufficient.  At the same time, something like what
 Concurrent ML does by making events first-class solves this problem
 nicely.
 
-## Documentation
-
-The implementation is useful enough that its public interfaces should
-be documented :)
-
 ## What if a fiber throws an exception?
 
 In batch mode, probably the exception should be caught by the
@@ -108,17 +103,6 @@ We need to provide API for things like:
 ## When would we want to migrate a fiber to a different thread?
 
 Also, how would we do it?
-
-## `select()` or similar
-
-We should certainly provide a `select-message` interface that returns
-the first readable message, along with the channel that it came from.
-For asynchronous sends that will never block, just spawning a fiber to
-do the send is suffient.  This leaves out the case of wanting to wait
-on the first readable or writable channel, and points to the
-conclusion that we really need to look at Concurrent ML to see if we
-can integrate first-class events into fibers.  See also
-https://www.cs.utah.edu/plt/publications/pldi04-ff.pdf.
 
 ## Readline?  REPL over channels
 
