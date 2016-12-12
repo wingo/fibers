@@ -722,10 +722,11 @@ if @var{sched} is not running.
 @chapter Pitfalls
 
 Running Guile code within a fiber mostly ``just works''.  There are a
-couple of pitfalls to be aware of though.
+few pitfalls to be aware of though.
 
 @menu
 * Blocking::            Avoid calling blocking operations.
+* Barriers::            Avoid continuation barriers.
 * Mutation::            Avoid unstructured mutation of shared data.
 @end menu
 
@@ -782,6 +783,89 @@ write on a port or a channel that would block, or a @code{sleep}.
 Other than that, nothing will pre-empt a fiber, at least not
 currently.  If you need to yield to the scheduler, then at least do a
 @code{(sleep 0)} or something.
+
+@node Barriers
+@section Barriers
+
+When a fiber suspends, Fibers uses @code{abort-to-prompt} to save the
+fiber's continuation, saving each pending computation in that fiber to
+the heap.  When the fiber resumes, Fibers invokes the saved
+continuation, effectively rewinding these saved stack frames back onto
+the current stack.  For this operation to succeed, the saved
+continuation needs to be @var{rewindable}.
+
+Most continuations in Guile are rewindable.  However, not all of them
+are.  It's possible to explicitly instate a continuation barrier
+(@pxref{Continuation Barriers}) that will prevent rewinding the
+continuation:
+
+@example
+;; If put-message suspends, we will never resume!
+(run-fibers
+ (lambda ()
+   (with-continuation-barrier
+     (lambda () (put-message channel 42)))))
+@end example
+
+If the @code{put-message} call can't succeed directly, then the fiber
+will suspend.  However when the fiber becomes runnable again, it can't
+be rewound because of the barrier.  Because this is the case, when
+Fibers goes to suspend a computation but realizes that the suspended
+fiber could never be resumed, it throws an error instead.
+
+@code{with-continuation-barrier} is the only function in Guile that
+establishes a continuation barrier on purpose.  However there are
+number of other functions that accidentally establish a continuation
+barrier by recursing into C code and then back to Scheme.  (Guile can
+only rewind the state of a saved computation if Guile created the
+corresponding stack frame, and that's not the case for the
+intermediate stack frame created by the C compiler.)
+
+Accidental continuation barriers are bugs, and the Guile developers
+have been working on removing them over the years.  By now, most of
+the high-priority accidental barriers are gone.  Those that are left
+include:
+
+@itemize
+@item The body thunk of @code{call-with-blocked-asyncs}
+@item GOOPS methods attached to a primitive-generic like @code{+} or
+@code{equal?}
+@item Dynwind entry/exit handlers, but only when called due to nonlocal
+entry or exit
+@item R6RS custom binary port callbacks
+@item Legacy ``soft port'' callbacks
+@item R5RS ``delay'' callbacks
+@item Many module system callbacks (module transformers, etc)
+@item SRFI-13 string and character-set callbacks
+@item Callbacks from some SRFI-1 functions
+@item Callbacks from @code{sort}
+@item Custom hash table assoc functions
+@item Calls to @code{load-from-path} (though, oddly, not @code{load})
+@item Object printers, e.g. custom record printers
+@item @code{call-with-vm}
+@item @code{array-map} and related array functions
+@end itemize
+
+This set will be reduced over time as more of @code{libguile} is
+rewritten in Scheme.
+
+Finally, for port operations, @xref{Non-Blocking
+I/O,,,guile.info,Guile Reference Manual}.  When Guile tries to read
+from a file descriptor and nothing is available, normally it would
+call the current read waiter, which Fibers customizes to suspend the
+fiber and run another one in the meantime.  However for procedures
+that have not been rewritten in terms of the ``suspendable port
+operations'', notably including @code{read}, @code{write}, and
+@code{display}, the nothing-to-read condition is handled in C, not
+Scheme, so Guile cannot create a resumable continuation.  In this
+case, instead of erroring, Guile will wait until the file descriptor
+is readable or writable (as appropriate) and then continue.  However
+in the meantime, which may be forever, this blocks other fibers from
+running.  Therefore Fibers users sometimes have to be aware of the
+state of Guile's rewrite of port opertations in terms of
+suspendable-port primitives, and to help out if things aren't moving
+fast enough :)
+
 
 @node Mutation
 @section Mutation
