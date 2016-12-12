@@ -22,6 +22,7 @@
   #:use-module (system repl command)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
+  #:use-module ((ice-9 threads) #:select (call-with-new-thread))
   #:use-module (fibers)
   #:use-module (fibers internal))
 

@@ -26,6 +26,7 @@
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
   #:use-module (ice-9 fdes-finalizers)
+  #:use-module ((ice-9 threads) #:select (current-thread))
   #:export (;; Low-level interface: schedulers and threads.
             make-scheduler
             with-scheduler
