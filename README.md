@@ -1,7 +1,7 @@
 # Fibers
 
-Fibers is a facility that provides Erlang-like concurrency for Guile
-Scheme.
+Fibers is a facility that provides Go-like concurrency for Guile
+Scheme, in the tradition of Concurrent ML.
 
 
 ## A pasteable introduction to using Fibers
