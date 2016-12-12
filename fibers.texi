@@ -726,8 +726,9 @@ few pitfalls to be aware of though.
 
 @menu
 * Blocking::            Avoid calling blocking operations.
-* Barriers::            Avoid continuation barriers.
+* Barriers::            Avoid suspending inside continuation barriers.
 * Mutation::            Avoid unstructured mutation of shared data.
+* Mutexes::             Mutexes and fibers don't mix very well.
 @end menu
 
 @node Blocking
@@ -866,7 +867,6 @@ state of Guile's rewrite of port opertations in terms of
 suspendable-port primitives, and to help out if things aren't moving
 fast enough :)
 
-
 @node Mutation
 @section Mutation
 
@@ -887,7 +887,42 @@ The best way around this problem is to avoid unstructured mutation,
 and to instead share data by communicating over channels.  Using
 channels to communicate data produces much more robust, safe systems.
 
-If you need to mutate global data, do so within a mutex.
+If you need to mutate global data, the best way is to use an atomic
+variable.  If that is not possible, then consider spawning a fiber to
+manage the mutable data, and communicating with that fiber over
+channels.  Mutexes are also an option but are difficult to use
+correctly; see the considerations from the following section.
+
+@node Mutexes
+@section Mutexes
+
+Mutexes are low-level synchronization primitives provided by Guile.
+Used properly, they can be used to build concurrent systems that
+concurrently access data without corrupting it.
+
+@xref{Mutexes and Condition Variables,,,guile.info,Guile Reference
+Manual}, for some reasons why mutexes aren't so great for Guile in
+general.
+
+Guile's mutexes are an even worse solution with a Fibers system.  It
+is a bad idea for a fiber to grab a Guile mutex, because if the mutex
+is not available, Guile will suspend not just the fiber that is
+running but the entire kernel thread.  If the mutex is available, the
+fiber obtains it, cool; but if it the fiber suspends while holding a
+mutex, that's bad news.  Any fiber trying to acquire a mutex while a
+suspended fiber from the same thread already has the mutex will result
+in an error: as Guile thinks that the mutex has already been acquired
+by the current thread, it detects recursion and bails out.
+
+With condition variables, similar problems arise: waiting on a
+condition variable will block indefinitely, if the condition can only
+be signalled by another fiber in the current kernel thread.
+
+The root of this problem is that Guile associates mutexes with kernel
+threads, not fibers.  It would be possible however to make a
+Fibers-appropriate implementation of mutexes, but we suggest that
+users try atomic boxes or channels instead.  If you do use mutexes,
+take care to never suspend a fiber while owns any mutex.
 
 @node Status
 @chapter Project status
