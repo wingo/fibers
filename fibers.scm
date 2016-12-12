@@ -62,5 +62,10 @@
   (or (current-scheduler)
       (error "No scheduler current; call within run-fibers instead")))
 
-(define* (spawn-fiber thunk #:optional (sched (require-current-scheduler)))
-  (create-fiber sched thunk))
+(define* (spawn-fiber thunk #:optional (sched (require-current-scheduler))
+                      #:key (dynamic-state (current-dynamic-state)))
+  (let ((thunk (if dynamic-state
+                   (lambda ()
+                     (with-dynamic-state dynamic-state thunk))
+                   thunk)))
+    (create-fiber sched thunk)))

@@ -47,7 +47,8 @@ epoll_la_LDFLAGS = -export-dynamic -module
 
 TESTS = \
 	tests/basic.scm \
-	tests/channels.scm
+	tests/channels.scm \
+	tests/parameters.scm
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
