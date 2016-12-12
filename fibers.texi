@@ -797,8 +797,8 @@ continuation needs to be @var{rewindable}.
 
 Most continuations in Guile are rewindable.  However, not all of them
 are.  It's possible to explicitly instate a continuation barrier
-(@pxref{Continuation Barriers}) that will prevent rewinding the
-continuation:
+(@pxref{Continuation Barriers,,,guile.info,Guile Reference Manual})
+that will prevent rewinding the continuation:
 
 @example
 ;; If put-message suspends, we will never resume!
