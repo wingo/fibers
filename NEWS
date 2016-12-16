@@ -5,6 +5,30 @@ Fibers is a facility that provides Erlang-like concurrency for Guile
 Scheme.
 
 
+fibers 0.4.0 -- 2016-12-16
+==========================
+
+* Added preemption support; see `run-fibers' documentation in the
+  manual for more.
+
+* Documented REPL commands and examples.
+
+* Documented more pitfalls.
+
+* Use `suspendable-continuation?' if present.
+
+* Fibers each have their own dynamic state.
+
+fibers 0.3.0 -- 2016-10-12
+==========================
+
+* See git log.
+
+fibers 0.2.0 -- 2016-09-11
+==========================
+
+* See git log.
+
 fibers 0.1.0 -- 2016-07-02
 ==========================
 
