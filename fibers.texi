@@ -388,6 +388,7 @@ operations for channels and timers, and an internals interface.
 * Operations::          Composable abstractions for concurrency.
 * Channels::            Share memory by communicating.
 * Timers::              Operations on time.
+* REPL Commands::       Experimenting with Fibers at the console.
 * Internals::           Scheduler and fiber objects and operations.
 @end menu
 
@@ -605,6 +606,42 @@ operation will succeed with no values.
 @defun sleep seconds
 Block the calling fiber until @var{seconds} have elapsed.
 @end defun
+
+@node REPL Commands
+@section REPL Commands
+
+Fibers implements some basic extensions to the Guile command-line
+interface (its Read-Eval-Print Loop, or the REPL).  Prefix these
+commands with a comma (@code{,}) to run them at the REPL; see
+@code{,help fibers} for full details, once you have loaded the
+@code{(fibers)} module of course.
+
+@deffn {REPL Command} scheds
+Show a list of all schedulers.
+@end deffn
+
+@deffn {REPL Command} spawn-sched
+Create a new scheduler for fibers, and run it on a new kernel thread.
+@end deffn
+
+@deffn {REPL Command} kill-sched sched
+Shut down the scheduler named @var{sched}.  Use @code{,scheds} to list
+scheduler names.
+@end deffn
+
+@deffn {REPL Command} fibers [sched]
+Show a list of all fibers.  If @var{sched} is given, limit to fibers
+bound to the given scheduler.
+@end deffn
+
+@deffn {REPL Command} spawn-fiber exp [sched]
+Spawn a new fiber that runs @var{exp}.  If @var{sched} is given, the
+fiber will be spawned on the given scheduler.
+@end deffn
+
+@deffn {REPL Command} kill-fiber fiber
+Shut down a fiber.
+@end deffn
 
 @node Internals
 @section Internals

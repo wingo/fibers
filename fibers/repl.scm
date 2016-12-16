@@ -91,7 +91,7 @@ Shut down a scheduler."
   "fibers [SCHED]
 Show a list of fibers.
 
-If SCHED is given, limit to fibers bound to the given fold."
+If SCHED is given, limit to fibers bound to the given scheduler."
   (let ((sched (and sched
                     (or (scheduler-by-name sched)
                         (error "no scheduler with name" sched)))))
