@@ -48,7 +48,6 @@
         (force-output port)
         (loop))))))
 
-;; todo: accept and connect
 (define (socket-loop socket store)
   (let loop ()
     (match (accept socket)

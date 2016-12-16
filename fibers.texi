@@ -47,6 +47,7 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 * Introduction::          What's this all about?
 * Reference::             API reference.
 * Pitfalls::              Stay on the happy path.
+* Examples::              Starting points for a hack.
 * Status::                Fibers is a work in progress.
 @end menu
 
@@ -935,6 +936,204 @@ threads, not fibers.  It would be possible however to make a
 Fibers-appropriate implementation of mutexes, but we suggest that
 users try atomic boxes or channels instead.  If you do use mutexes,
 take care to never suspend a fiber while it owns any mutex.
+
+@node Examples
+@chapter Examples
+
+Here are some small examples to get you started.
+
+@menu
+* Ping::                An echo server and client.
+* Memcached::           A simple memcached server and client.
+* Web Server::          Guile's non-blocking web server.
+@end menu
+
+More examples would be great, especially demonstrating interesting
+things that can be done with channels.
+
+@node Ping
+@section Ping
+
+@subsection Server
+
+This simple server listens on a TCP port, echoing lines back to any
+user that connects.  This file can be found in
+@code{examples/ping-server.scm}, and can be run from the build dir as
+@code{./env guile examples/ping-server.scm}.
+
+First, we use some standard Guile modules, and the fibers module.
+
+@example
+(use-modules (rnrs bytevectors)
+             (fibers)
+             (ice-9 textual-ports)
+             (ice-9 rdelim)
+             (ice-9 match))
+@end example
+
+We run the server within a @code{run-fibers} call.
+
+@example
+(define* (run-ping-server #:key
+                          (host #f)
+                          (family AF_INET)
+                          (addr (if host
+                                    (inet-pton family host)
+                                    INADDR_LOOPBACK))
+                          (port 11211)
+                          (socket (make-default-socket family addr port)))
+  (listen socket 1024)
+  (sigaction SIGPIPE SIG_IGN)
+  (socket-loop socket (make-hash-table)))
+
+(run-fibers run-ping-server)
+@end example
+
+Up to here, all good.  Perhaps we should look at how to open a socket;
+here are a couple helpers that appear often in applications that use
+suspendable ports.  @xref{Non-Blocking I/O,,,guile.info,Guile
+Reference Manual}, for full details.
+
+@example
+(define (set-nonblocking! port)
+  (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
+  (setvbuf port 'block 1024))
+
+(define (make-default-socket family addr port)
+  (let ((sock (socket PF_INET SOCK_STREAM 0)))
+    (setsockopt sock SOL_SOCKET SO_REUSEADDR 1)
+    (fcntl sock F_SETFD FD_CLOEXEC)
+    (bind sock family addr port)
+    (set-nonblocking! sock)
+    sock))
+@end example
+
+We hope to make this easier in the future; it's a bit too much
+ceremony.  Now, the main dish is the server loop, that simply accepts
+new connections, forking off a fiber for each connection:
+
+@example
+(define (socket-loop socket store)
+  (let loop ()
+    (match (accept socket)
+      ((client . addr)
+       (set-nonblocking! client)
+       ;; Disable Nagle's algorithm.  We buffer ourselves.
+       (setsockopt client IPPROTO_TCP TCP_NODELAY 0)
+       (spawn-fiber (lambda () (client-loop client addr store)))
+       (loop)))))
+@end example
+
+Finally, the loop to handle a single client:
+
+@example
+(define (client-loop port addr store)
+  (let loop ()
+    ;; TODO: Restrict read-line to 512 chars.
+    (let ((line (read-line port)))
+      (cond
+       ((eof-object? line)
+        (close-port port))
+       (else
+        (put-string port line)
+        (put-char port #\newline)
+        (force-output port)
+        (loop))))))
+@end example
+
+This ping server is fairly straightforward, and is only flawed in a
+couple of ways: it doesn't limit the line size, and so is vulnerable
+to memory exhaustion if the client gives it a very, very big line, and
+additionally, it does not time out clients after inactivity, so the
+poll set could get quite large.
+
+In practice the limit for the number of connections is imposed by the
+system in the form of a file descriptor limit.  Use @code{ulimit -n}
+to increase this limit on the console, or @code{setrlimit} to increase
+it from Guile, within the hard limits imposed by the system.
+
+@subsection Client
+
+The client is similar to the server; see
+@code{examples/ping-client.scm} for full details.  It can be run as
+@code{./env guile examples/ping-client.scm N M}, to make N concurrent
+connections to the server and make a series of M requests on each
+connection.  It spawns a fiber per connection, and then uses a normal
+Guile loop to make the serial requests.
+
+@example
+(define (run-ping-test num-clients num-connections)
+  ;; The getaddrinfo call blocks, unfortunately.  Call it once before
+  ;; spawning clients.
+  (let ((addrinfo (car (getaddrinfo "localhost" "11211"))))
+    (let lp ((n 0))
+      (when (< n num-clients)
+        (spawn-fiber
+         (lambda ()
+           (client-loop addrinfo n num-connections)))
+        (lp (1+ n))))))
+@end example
+
+Running this on a laptop from 2015 yields results more or less like
+this:
+
+@example
+$ time ./env guile examples/ping-client.scm 1000 100
+
+real	0m2.478s
+user	0m1.632s
+sys	0m0.552s
+@end example
+
+That's a throughput of somewhere around 40000 fiber switches per
+second on each side, which is none too shabby.
+
+@node Memcached
+@section Memcached
+
+Similarly to the echo server, Fibers includes an example memcached
+server and client.  Run the server like this:
+
+@example
+$ ./env guile examples/memcached-server.scm
+@end example
+
+Run the client as with the ping client:
+
+@example
+$ time ./env guile examples/memcached-client.scm 1000 100
+
+real	0m8.399s
+user	0m6.492s
+sys	0m1.456s
+@end example
+
+Here we see a throughput of around 12000 puts plus 12000 gets per
+second; pretty good for a basic implementation.
+
+@node Web Server
+@section Web Server
+
+Fibers includes a ``backend'' for Guile's built-in web server that
+uses fibers.  To run a web server that serves each client from fibers,
+specify the @code{fibers} backend when running your web server:
+
+@example
+(use-modules (web server))
+
+(define (handler request body)
+  (values '((content-type . (text/plain)))
+          "Hello, World!"))
+
+(run-server handler 'fibers)
+@end example
+
+Performance seems to be on par with the standard web server backend
+implementation shipped with Guile, though it is not as
+battle-hardened.  @xref{Barriers}, as well, for things that need
+improving on the Guile side of things.
+
+
 
 @node Status
 @chapter Project status
