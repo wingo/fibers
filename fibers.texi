@@ -316,9 +316,9 @@ to an @code{epoll} set.  In either case, the scheduler remembers which
 fibers are waiting and for what, so that the user can inspect the
 state of their system.
 
-If no scheduler has been installed in the current thread, the fiber
-will... well, we don't know yet!  Either it blocks its thread, or it
-aborts.  We don't know.
+Currently in Fibers there is no ambient scheduler running; an error is
+signalled if a user calls @code{spawn-fiber} while not inside a
+@code{run-fibers} invocation. 
 
 On the Scheme level, a fiber is a delimited continuation.  When a
 scheduler runs a fiber, it does so within a prompt; when the fiber
@@ -429,12 +429,15 @@ or writes to prevent other fibers from running, pass @code{#f} as the
 By default, @code{run-fibers} will create a fresh scheduler.  If you
 happen to have a pre-existing scheduler (because you used the
 internals interface to create one), you can pass it to
-@code{run-fibers} using the @code{#:scheduler} keyword argument.  If
-@code{run-fibers} creates a new scheduler, it will pass @var{hz} to
-the @code{make-scheduler} invocation.  By default @var{hz} is 0,
-indicating that the scheduler should not be pre-emptive.  Pass a
-higher value to cause computationally expensive tasks to be preempted
-if possible.
+@code{run-fibers} using the @code{#:scheduler} keyword argument.
+
+By default @var{hz} is 0, indicating that running fibers should never
+be preempted, and should instead run until they need to wait on some
+operation.  That is to say, the default scheduling mode is
+cooperative.  Pass a higher value to cause computationally expensive
+tasks to be preempted if possible.  Note that preemption will only
+occur if the fiber can actually be suspended; @xref{Barriers}, for
+more information.
 
 The scheduler will be destroyed when @code{run-fibers} finishes,
 unless the scheduler was already ``current'' (@pxref{Internals}).  If
@@ -616,12 +619,9 @@ point, but for now this section is a stub.
 (use-modules (fibers internal))
 @end example
 
-@defun make-scheduler [#:hz hz=0]
+@defun make-scheduler
 Make a new scheduler in which to run fibers.  @var{hz} indicates the
-frequency at which fibers should be preempted.  By default @var{hz} is
-0, indicating that the scheduler should not be preempt fibers that hog
-the CPU.  Note that preemption will only occur if the fiber can
-actually be suspended; @xref{Barriers}, for more information.
+frequency at which fibers should be preempted.  
 @end defun
 
 @defspec with-scheduler scheduler body ...
@@ -875,7 +875,7 @@ case, instead of erroring, Guile will wait until the file descriptor
 is readable or writable (as appropriate) and then continue.  However
 in the meantime, which may be forever, this blocks other fibers from
 running.  Therefore Fibers users sometimes have to be aware of the
-state of Guile's rewrite of port opertations in terms of
+state of Guile's rewrite of port operations in terms of
 suspendable-port primitives, and to help out if things aren't moving
 fast enough :)
 
@@ -886,14 +886,14 @@ Although code run within fibers looks like normal straight-up Scheme,
 it runs concurrently with other fibers.  This means that if you mutate
 shared state and other fibers mutate the same shared state using
 normal Scheme procedures like @code{set!}, @code{vector-set!}, or the
-like, then probably you're going to have a bad time.  Although
-currently fibers aren't scheduled pre-emptively, multi-step
-transactions may be suspended if your code reaches a yield point in
-the middle of performing the transaction.
+like, then probably you're going to have a bad time.  Even with the
+default cooperative scheduling mode, multi-step transactions may be
+suspended if your code reaches a yield point in the middle of
+performing the transaction.
 
-Likewise if you have multiple kernel threads running fiber schedulers,
-then it could indeed be that you have multiple fibers running in
-parallel.
+Of course if you enable preemption or have multiple kernel threads
+running fiber schedulers and you still use unstructured mutation, then
+it could indeed be that you have many more possible system states.
 
 The best way around this problem is to avoid unstructured mutation,
 and to instead share data by communicating over channels.  Using
@@ -934,7 +934,7 @@ The root of this problem is that Guile associates mutexes with kernel
 threads, not fibers.  It would be possible however to make a
 Fibers-appropriate implementation of mutexes, but we suggest that
 users try atomic boxes or channels instead.  If you do use mutexes,
-take care to never suspend a fiber while owns any mutex.
+take care to never suspend a fiber while it owns any mutex.
 
 @node Status
 @chapter Project status
