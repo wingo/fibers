@@ -30,6 +30,7 @@ SOURCES = \
 	fibers/deque.scm \
 	fibers/epoll.scm \
 	fibers/internal.scm \
+	fibers/interrupts.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
 	fibers/posix-clocks.scm \

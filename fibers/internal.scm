@@ -53,7 +53,8 @@
             fiber-by-name
 
             suspend-current-fiber
-            resume-fiber))
+            resume-fiber
+            yield-current-fiber))
 
 (define-once fibers-nameset (make-nameset))
 (define-once schedulers-nameset (make-nameset))
@@ -78,7 +79,7 @@ name is known."
 
 (define-record-type <scheduler>
   (%make-scheduler name epfd active-fd-count prompt-tag runqueue
-                   sources timers kernel-thread hz)
+                   sources timers kernel-thread)
   scheduler?
   (name scheduler-name set-scheduler-name!)
   (epfd scheduler-epfd)
@@ -91,8 +92,7 @@ name is known."
   ;; PSQ of thunk -> expiry
   (timers scheduler-timers set-scheduler-timers!)
   ;; atomic parameter of thread
-  (kernel-thread scheduler-kernel-thread)
-  (hz scheduler-hz))
+  (kernel-thread scheduler-kernel-thread))
 
 (define-record-type <fiber>
   (make-fiber scheduler continuation)
@@ -115,7 +115,7 @@ name is known."
              (unless (eq? prev init)
                (error "owned by other thread" prev))))))))
 
-(define* (make-scheduler #:key (hz 0))
+(define* (make-scheduler)
   "Make a new scheduler in which to run fibers."
   (let ((epfd (epoll-create))
         (active-fd-count 0)
@@ -127,8 +127,7 @@ name is known."
                           <))
         (kernel-thread (make-atomic-parameter #f)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
-                                  runqueue sources timers kernel-thread
-                                  hz)))
+                                  runqueue sources timers kernel-thread)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
 
@@ -268,53 +267,24 @@ current."
         (set-fiber-continuation! fiber k)
         (after-suspend fiber)))))
 
-;; Using SIGPROF for preemption prevents using it for other purposes
-;; like profiling.  A better solution would be clock_nanosleep on the
-;; CLOCK_PROCESS_CPUTIME_ID clock from a separate thread.
-(define (maybe-preemptive sched thunk)
-  (let ((hz (scheduler-hz sched))
-        (tag (scheduler-prompt-tag sched))
-        (prev #f))
-    (define (sigprof-handler _)
-      (when (suspendable-continuation? tag)
-        (suspend-current-fiber
-         (lambda (fiber)
-           (resume-fiber fiber (lambda () (values)))))))
-
-    (define (start-preemption!)
-      (let ((period-usecs (inexact->exact (round (/ 1e6 hz)))))
-        (set! prev (car (sigaction SIGPROF sigprof-handler)))
-        (setitimer ITIMER_PROF 0 period-usecs 0 period-usecs)))
-
-    (define (stop-preemption!)
-      (setitimer ITIMER_PROF 0 0 0 0)
-      (sigaction SIGPROF prev))
-
-    (if (zero? hz)
-        (thunk)
-        (dynamic-wind start-preemption! thunk stop-preemption!))))
-
 (define* (run-scheduler sched)
   "Run @var{sched} until there are no more fibers ready to run, no
 file descriptors being waited on, and no more timers pending to run.
 Return zero values."
-  (maybe-preemptive
-   sched
-   (lambda ()
-     (let lp ()
-       (schedule-runnables-for-next-turn sched)
-       (match (dequeue-all! (scheduler-runqueue sched))
-         (()
-          ;; Could be the scheduler is stopping, or it could be that we
-          ;; got a spurious wakeup.  In any case, this is the place to
-          ;; check to see whether the scheduler is really done.
-          (cond
-           ((not (zero? (scheduler-active-fd-count sched))) (lp))
-           ((not (psq-empty? (scheduler-timers sched))) (lp))
-           (else (values))))
-         (runnables
-          (for-each run-fiber runnables)
-          (lp)))))))
+  (let lp ()
+    (schedule-runnables-for-next-turn sched)
+    (match (dequeue-all! (scheduler-runqueue sched))
+      (()
+       ;; Could be the scheduler is stopping, or it could be that we
+       ;; got a spurious wakeup.  In any case, this is the place to
+       ;; check to see whether the scheduler is really done.
+       (cond
+        ((not (zero? (scheduler-active-fd-count sched))) (lp))
+        ((not (psq-empty? (scheduler-timers sched))) (lp))
+        (else (values))))
+      (runnables
+       (for-each run-fiber runnables)
+       (lp)))))
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."
@@ -359,6 +329,18 @@ even if @var{fiber} is running on a remote scheduler."
   (let ((cont (fiber-continuation fiber)))
     (unless cont (error "invalid fiber" fiber))
     (schedule-fiber! fiber (lambda () (cont thunk)))))
+
+(define* (yield-current-fiber)
+  "Yield control to the current scheduler.  Like
+@code{suspend-current-fiber} followed directly by @code{resume-fiber},
+except that it avoids suspending if the current continuation isn't
+suspendable.  Returns @code{#t} if the yield succeeded, or @code{#f}
+otherwise."
+  (let ((tag (scheduler-prompt-tag (current-scheduler))))
+    (and (suspendable-continuation? tag)
+         (begin
+           (abort-to-prompt tag (lambda (fiber) (resume-fiber fiber #f)))
+           #t))))
 
 (define (finalize-fd sched fd)
   "Remove data associated with @var{fd} from the scheduler @var{ctx}.
