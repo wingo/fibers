@@ -32,6 +32,7 @@ SOURCES = \
 	fibers/internal.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
+	fibers/posix-clocks.scm \
 	fibers/psq.scm \
 	fibers/repl.scm \
 	fibers/timers.scm \
