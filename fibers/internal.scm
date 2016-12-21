@@ -193,6 +193,10 @@ current."
                  ;; operations aren't proper CML operations, though.
                  (unless (zero? (logand revents
                                         (logior (source-events source) EPOLLERR)))
+                   ;; Fibers can't be stolen while they are in the
+                   ;; sources table; the scheduler of the fiber must
+                   ;; be SCHED, and so we are indeed responsible for
+                   ;; resuming the fiber.
                    (resume-fiber (source-fiber source) (lambda () revents))))
                (cdr sources))
      (cond
@@ -285,6 +289,13 @@ Return zero values."
       (runnables
        (for-each run-fiber runnables)
        (lp)))))
+
+(define (steal-work! sched)
+  "Steal some work from @var{sched}.  Return a list of runnable fibers
+in FIFO order, or the empty list if no work could be stolen."
+  (match (dequeue! (scheduler-runqueue sched) #f)
+    (#f '())
+    (fiber (list fiber))))
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."

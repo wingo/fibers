@@ -28,6 +28,7 @@
             dequeue-all
             dequeue-match
             undequeue
+            dequeue!
             dequeue-all!
             enqueue!))
 
@@ -85,10 +86,20 @@
   (let spin ((x (atomic-box-ref box)))
     (call-with-values (lambda () (f x))
       (lambda (x* ret)
-        (let ((x** (atomic-box-compare-and-swap! box x x*)))
-          (if (eq? x x**)
-              ret
-              (spin x**)))))))
+        (if (eq? x x*)
+            ret
+            (let ((x** (atomic-box-compare-and-swap! box x x*)))
+              (if (eq? x x**)
+                  ret
+                  (spin x**))))))))
+
+(define* (dequeue! dqbox #:optional default)
+  (update! dqbox (lambda (dq)
+                   (call-with-values (lambda () (dequeue dq))
+                     (lambda (dq* fiber)
+                       (if dq*
+                           (values dq* fiber)
+                           (values dq default)))))))
 
 (define (dequeue-all! dqbox)
   (update! dqbox (lambda (dq)
