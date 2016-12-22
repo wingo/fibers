@@ -282,21 +282,23 @@ file descriptors being waited on, and no more timers pending to run.
 Return zero values."
   (let ((next (scheduler-next-runqueue sched))
         (cur (scheduler-current-runqueue sched)))
-    (let lp ()
+    (let next-turn ()
       (schedule-runnables-for-next-turn sched)
       (stack-push-list! cur (reverse (stack-pop-all! next)))
-      (match (stack-pop-all! cur)
-        (()
-         ;; Could be the scheduler is stopping, or it could be that we
-         ;; got a spurious wakeup.  In any case, this is the place to
-         ;; check to see whether the scheduler is really done.
-         (cond
-          ((not (zero? (scheduler-active-fd-count sched))) (lp))
-          ((not (psq-empty? (scheduler-timers sched))) (lp))
-          (else (values))))
-        (runnables
-         (for-each run-fiber runnables)
-         (lp))))))
+      (cond
+       ((stack-empty? cur)
+        ;; Could be the scheduler is stopping, or it could be that we
+        ;; got a spurious wakeup.  In any case, this is the place to
+        ;; check to see whether the scheduler is really done.
+        (cond
+         ((not (zero? (scheduler-active-fd-count sched))) (next-turn))
+         ((not (psq-empty? (scheduler-timers sched))) (next-turn))
+         (else (values))))
+       (else
+        (let next-fiber ()
+          (match (stack-pop! cur #f)
+            (#f (next-turn))
+            (fiber (run-fiber fiber) (next-fiber)))))))))
 
 (define (steal-work! sched)
   "Steal some work from @var{sched}.  Return a list of runnable fibers
