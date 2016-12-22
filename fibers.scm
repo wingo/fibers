@@ -19,6 +19,7 @@
 
 (define-module (fibers)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 atomic)
   #:use-module (fibers internal)
   #:use-module (fibers repl)
   #:use-module (fibers timers)
@@ -52,16 +53,14 @@
      (with-interrupts
       hz yield-current-fiber
       (lambda ()
-        (let ((ret #f))
+        (let ((ret (make-atomic-box #f)))
           (spawn-fiber (lambda ()
                          (call-with-values (or init values)
-                           (lambda vals (set! ret vals))))
+                           (lambda vals (atomic-box-set! ret vals))))
                        scheduler)
-          (let lp ()
-            (run-scheduler scheduler)
-            (unless ret (lp)))
+          (run-scheduler scheduler (lambda () (atomic-box-ref ret)))
           (unless keep-scheduler? (destroy-scheduler scheduler))
-          (apply values ret)))))))
+          (apply values (atomic-box-ref ret))))))))
 
 (define (current-fiber-scheduler)
   (match (current-fiber)
