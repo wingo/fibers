@@ -19,7 +19,7 @@
 
 (define-module (fibers internal)
   #:use-module (srfi srfi-9)
-  #:use-module (fibers deque)
+  #:use-module (fibers stack)
   #:use-module (fibers epoll)
   #:use-module (fibers psq)
   #:use-module (fibers nameset)
@@ -78,15 +78,18 @@ name is known."
   (nameset-ref fibers-nameset name))
 
 (define-record-type <scheduler>
-  (%make-scheduler name epfd active-fd-count prompt-tag runqueue
+  (%make-scheduler name epfd active-fd-count prompt-tag
+                   next-runqueue current-runqueue
                    sources timers kernel-thread)
   scheduler?
   (name scheduler-name set-scheduler-name!)
   (epfd scheduler-epfd)
   (active-fd-count scheduler-active-fd-count set-scheduler-active-fd-count!)
   (prompt-tag scheduler-prompt-tag)
-  ;; atomic box of deque of fiber
-  (runqueue scheduler-runqueue)
+  ;; atomic stack of fiber to run next turn (reverse order)
+  (next-runqueue scheduler-next-runqueue)
+  ;; atomic stack of fiber to run this turn
+  (current-runqueue scheduler-current-runqueue)
   ;; fd -> ((total-events . min-expiry) #(events expiry fiber) ...)
   (sources scheduler-sources)
   ;; PSQ of thunk -> expiry
@@ -120,14 +123,16 @@ name is known."
   (let ((epfd (epoll-create))
         (active-fd-count 0)
         (prompt-tag (make-prompt-tag "fibers"))
-        (runqueue (make-atomic-box (make-empty-deque)))
+        (next-runqueue (make-empty-stack))
+        (current-runqueue (make-empty-stack))
         (sources (make-hash-table))
         (timers (make-psq (match-lambda*
                             (((t1 . c1) (t2 . c2)) (< t1 t2)))
                           <))
         (kernel-thread (make-atomic-parameter #f)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
-                                  runqueue sources timers kernel-thread)))
+                                  next-runqueue current-runqueue
+                                  sources timers kernel-thread)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
       sched)))
 
@@ -173,7 +178,7 @@ current."
   ;; for a fiber scheduled on a remote thread.
   (set-fiber-continuation! fiber thunk)
   (let ((sched (fiber-scheduler fiber)))
-    (enqueue! (scheduler-runqueue sched) fiber)
+    (stack-push! (scheduler-next-runqueue sched) fiber)
     (unless (eq? sched (current-scheduler))
       (epoll-wake! (scheduler-epfd sched)))
     (values)))
@@ -211,7 +216,7 @@ current."
 
 (define (scheduler-poll-timeout sched)
   (cond
-   ((not (empty-deque? (atomic-box-ref (scheduler-runqueue sched))))
+   ((not (stack-empty? (scheduler-next-runqueue sched)))
     ;; Don't sleep if there are fibers in the runqueue already.
     0)
    ((psq-empty? (scheduler-timers sched))
@@ -275,25 +280,28 @@ current."
   "Run @var{sched} until there are no more fibers ready to run, no
 file descriptors being waited on, and no more timers pending to run.
 Return zero values."
-  (let lp ()
-    (schedule-runnables-for-next-turn sched)
-    (match (dequeue-all! (scheduler-runqueue sched))
-      (()
-       ;; Could be the scheduler is stopping, or it could be that we
-       ;; got a spurious wakeup.  In any case, this is the place to
-       ;; check to see whether the scheduler is really done.
-       (cond
-        ((not (zero? (scheduler-active-fd-count sched))) (lp))
-        ((not (psq-empty? (scheduler-timers sched))) (lp))
-        (else (values))))
-      (runnables
-       (for-each run-fiber runnables)
-       (lp)))))
+  (let ((next (scheduler-next-runqueue sched))
+        (cur (scheduler-current-runqueue sched)))
+    (let lp ()
+      (schedule-runnables-for-next-turn sched)
+      (stack-push-list! cur (reverse (stack-pop-all! next)))
+      (match (stack-pop-all! cur)
+        (()
+         ;; Could be the scheduler is stopping, or it could be that we
+         ;; got a spurious wakeup.  In any case, this is the place to
+         ;; check to see whether the scheduler is really done.
+         (cond
+          ((not (zero? (scheduler-active-fd-count sched))) (lp))
+          ((not (psq-empty? (scheduler-timers sched))) (lp))
+          (else (values))))
+        (runnables
+         (for-each run-fiber runnables)
+         (lp))))))
 
 (define (steal-work! sched)
   "Steal some work from @var{sched}.  Return a list of runnable fibers
 in FIFO order, or the empty list if no work could be stolen."
-  (match (dequeue! (scheduler-runqueue sched) #f)
+  (match (stack-pop! (scheduler-current-runqueue sched) #f)
     (#f '())
     (fiber (list fiber))))
 

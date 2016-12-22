@@ -35,6 +35,7 @@ SOURCES = \
 	fibers/operations.scm \
 	fibers/posix-clocks.scm \
 	fibers/psq.scm \
+	fibers/stack.scm \
 	fibers/repl.scm \
 	fibers/timers.scm \
 	web/server/fibers.scm
