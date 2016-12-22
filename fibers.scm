@@ -18,17 +18,17 @@
 ;;;; 
 
 (define-module (fibers)
+  #:use-module (ice-9 match)
   #:use-module (fibers internal)
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
+  #:use-module ((ice-9 threads) #:select (current-thread))
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
-  #:export (run-fibers
-            spawn-fiber)
-  #:re-export (current-fiber
-               sleep))
+  #:export (run-fibers spawn-fiber)
+  #:re-export (current-fiber sleep))
 
 (define (wait-for-readable port)
   (suspend-current-fiber
@@ -42,7 +42,8 @@
 (define* (run-fibers #:optional (init #f)
                      #:key (hz 0) (scheduler (make-scheduler))
                      (install-suspendable-ports? #t)
-                     (keep-scheduler? (eq? scheduler (current-scheduler))))
+                     (keep-scheduler?
+                      (->bool (scheduler-kernel-thread scheduler))))
   (when install-suspendable-ports? (install-suspendable-ports!))
   (with-scheduler
    scheduler
@@ -62,14 +63,11 @@
           (unless keep-scheduler? (destroy-scheduler scheduler))
           (apply values ret)))))))
 
-(define (require-current-scheduler)
-  (or (current-scheduler)
-      (error "No scheduler current; call within run-fibers instead")))
+(define (current-fiber-scheduler)
+  (match (current-fiber)
+    (#f (error "No scheduler current; call within run-fibers instead"))
+    (fiber (fiber-scheduler fiber))))
 
-(define* (spawn-fiber thunk #:optional (sched (require-current-scheduler))
+(define* (spawn-fiber thunk #:optional (sched (current-fiber-scheduler))
                       #:key (dynamic-state (current-dynamic-state)))
-  (let ((thunk (if dynamic-state
-                   (lambda ()
-                     (with-dynamic-state dynamic-state thunk))
-                   thunk)))
-    (create-fiber sched thunk)))
+  (create-fiber sched thunk dynamic-state))

@@ -32,7 +32,6 @@
             make-scheduler
             with-scheduler
             scheduler-name
-            (current-scheduler/public . current-scheduler)
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
             run-scheduler
             destroy-scheduler
@@ -138,15 +137,14 @@ name is known."
 
 (define-syntax-rule (with-scheduler scheduler body ...)
   "Evaluate @code{(begin @var{body} ...)} in an environment in which
-@var{scheduler} is bound to the current kernel thread and marked as
-current.  Signal an error if @var{scheduler} is already running in
-some other kernel thread."
+@var{scheduler} is bound to the current kernel thread.  Signal an
+error if @var{scheduler} is already running in some other kernel
+thread."
   (let ((sched scheduler))
     (dynamic-wind (lambda ()
                     ((scheduler-kernel-thread sched) (current-thread)))
                   (lambda ()
-                    (parameterize ((current-scheduler sched))
-                      body ...))
+                    body ...)
                   (lambda ()
                     ((scheduler-kernel-thread sched) #f)))))
 
@@ -155,11 +153,6 @@ some other kernel thread."
 @code{#f} if @var{sched} is not running."
   ((scheduler-kernel-thread sched)))
 
-(define current-scheduler (make-parameter #f))
-(define (current-scheduler/public)
-  "Return the current scheduler, or @code{#f} if no scheduler is
-current."
-  (current-scheduler))
 (define (make-source events expiry fiber) (vector events expiry fiber))
 (define (source-events s) (vector-ref s 0))
 (define (source-expiry s) (vector-ref s 1))
@@ -179,7 +172,7 @@ current."
   (set-fiber-continuation! fiber thunk)
   (let ((sched (fiber-scheduler fiber)))
     (stack-push! (scheduler-next-runqueue sched) fiber)
-    (unless (eq? sched (current-scheduler))
+    (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
       (epoll-wake! (scheduler-epfd sched)))
     (values)))
 
@@ -265,16 +258,14 @@ current."
   (run-timers sched))
 
 (define* (run-fiber fiber)
-  (parameterize ((current-fiber fiber))
-    (call-with-prompt
-        (scheduler-prompt-tag (fiber-scheduler fiber))
-      (lambda ()
-        (let ((thunk (fiber-continuation fiber)))
-          (set-fiber-continuation! fiber #f)
-          (thunk)))
-      (lambda (k after-suspend)
-        (set-fiber-continuation! fiber k)
-        (after-suspend fiber)))))
+  (call-with-prompt (scheduler-prompt-tag (fiber-scheduler fiber))
+    (lambda ()
+      (let ((thunk (fiber-continuation fiber)))
+        (set-fiber-continuation! fiber #f)
+        (thunk)))
+    (lambda (k after-suspend)
+      (set-fiber-continuation! fiber k)
+      (after-suspend fiber))))
 
 (define* (run-scheduler sched)
   "Run @var{sched} until there are no more fibers ready to run, no
@@ -313,10 +304,17 @@ in FIFO order, or the empty list if no work could be stolen."
   (for-each kill-fiber (list-copy (scheduler-fibers sched)))
   (epoll-destroy (scheduler-epfd sched)))
 
-(define (create-fiber sched thunk)
+(define (create-fiber sched thunk dynamic-state)
   "Spawn a new fiber in @var{sched} with the continuation @var{thunk}.
-The fiber will be scheduled on the next turn."
-  (let ((fiber (make-fiber sched #f)))
+The fiber will be scheduled on the next turn.  During the fiber's
+extent, @var{dynamic-state} will be made current, isolating fluid and
+parameter mutations to this fiber."
+  (let* ((fiber (make-fiber sched #f))
+         (thunk (lambda ()
+                  (with-dynamic-state dynamic-state
+                    (lambda ()
+                      (current-fiber fiber)
+                      (thunk))))))
     (nameset-add! fibers-nameset fiber)
     (schedule-fiber! fiber thunk)))
 
@@ -337,7 +335,7 @@ that this is currently unimplemented!"
                                 (after-suspend (lambda (fiber) #f)))
   "Suspend the current fiber.  Call the optional @var{after-suspend}
 callback, if present, with the suspended thread as its argument."
-  (let ((tag (scheduler-prompt-tag (current-scheduler))))
+  (let ((tag (scheduler-prompt-tag (fiber-scheduler (current-fiber)))))
     (unless (suspendable-continuation? tag)
       (error "Attempt to suspend fiber within continuation barrier"))
     ((abort-to-prompt tag after-suspend))))
@@ -357,7 +355,7 @@ even if @var{fiber} is running on a remote scheduler."
 except that it avoids suspending if the current continuation isn't
 suspendable.  Returns @code{#t} if the yield succeeded, or @code{#f}
 otherwise."
-  (let ((tag (scheduler-prompt-tag (current-scheduler))))
+  (let ((tag (scheduler-prompt-tag (fiber-scheduler (current-fiber)))))
     (and (suspendable-continuation? tag)
          (begin
            (abort-to-prompt tag (lambda (fiber) (resume-fiber fiber #f)))
