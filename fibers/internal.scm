@@ -371,11 +371,14 @@ even if @var{fiber} is running on a remote scheduler."
 except that it avoids suspending if the current continuation isn't
 suspendable.  Returns @code{#t} if the yield succeeded, or @code{#f}
 otherwise."
-  (let ((tag (scheduler-prompt-tag (fiber-scheduler (current-fiber)))))
-    (and (suspendable-continuation? tag)
-         (begin
-           (abort-to-prompt tag (lambda (fiber) (resume-fiber fiber #f)))
-           #t))))
+  (match (current-fiber)
+    (#f #f)
+    (fiber
+     (let ((tag (scheduler-prompt-tag (fiber-scheduler fiber))))
+       (and (suspendable-continuation? tag)
+            (begin
+              (abort-to-prompt tag (lambda (fiber) (resume-fiber fiber #f)))
+              #t))))))
 
 (define (finalize-fd sched fd)
   "Remove data associated with @var{fd} from the scheduler @var{ctx}.
