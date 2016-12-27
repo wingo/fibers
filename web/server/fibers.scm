@@ -158,8 +158,7 @@
    (server-have-request-prompt server)
    (lambda ()
      (run-fibers #:scheduler (server-scheduler server)
-                 #:install-suspendable-ports? #f
-                 #:keep-scheduler? #t))
+                 #:install-suspendable-ports? #f))
    (lambda (k client request body)
      (values client request body))))
 

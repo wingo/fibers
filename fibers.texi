@@ -405,7 +405,7 @@ import the @code{(fibers)} module:
 To create a new fibers scheduler and run it in the current Guile
 thread, use @code{run-fibers}.
 
-@defun run-fibers [init-thunk=@code{#f}] [#:install-suspendable-ports?=@code{#t}] [#:scheduler=@code{(make-scheduler)}] [#:keep-scheduler?] [#:hz=0]
+@defun run-fibers [init-thunk=@code{#f}] [#:install-suspendable-ports?=@code{#t}] [#:scheduler=@code{#f}] [#:hz=0]
 Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
 until the scheduler has no more runnable fibers.  Return the value(s)
 returned by the call to @var{init-thunk}.
@@ -428,10 +428,12 @@ details on suspendable ports.  If for some reason you want port reads
 or writes to prevent other fibers from running, pass @code{#f} as the
 @code{#:install-suspendable-ports?} keyword argument.
 
-By default, @code{run-fibers} will create a fresh scheduler.  If you
-happen to have a pre-existing scheduler (because you used the
-internals interface to create one), you can pass it to
-@code{run-fibers} using the @code{#:scheduler} keyword argument.
+By default, @code{run-fibers} will create a fresh scheduler, and
+destroy it after @code{run-fibers} finishes.  If you happen to have a
+pre-existing scheduler (because you used the internals interface to
+create one), you can pass it to @code{run-fibers} using the
+@code{#:scheduler} keyword argument.  In that case the scheduler will
+not be destroyed when @code{run-fibers} finishes.
 
 By default @var{hz} is 0, indicating that running fibers should never
 be preempted, and should instead run until they need to wait on some
@@ -440,12 +442,6 @@ cooperative.  Pass a higher value to cause computationally expensive
 tasks to be preempted if possible.  Note that preemption will only
 occur if the fiber can actually be suspended; @xref{Barriers}, for
 more information.
-
-The scheduler will be destroyed when @code{run-fibers} finishes,
-unless the scheduler was already ``current'' (@pxref{Internals}).  If
-you need to keep the scheduler, either make sure it is current or
-explicitly pass @code{#t} as the @code{#:keep-scheduler?} keyword
-argument.
 @end defun
 
 @defun spawn-fiber thunk [scheduler=@code{(require-current-scheduler)}] @
