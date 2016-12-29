@@ -149,7 +149,9 @@ epoll wait (if appropriate)."
   (atomic-box-set! (epoll-state epoll) 'waiting)
   (let* ((maxevents (epoll-maxevents epoll))
          (eventsv (ensure-epoll-eventsv epoll maxevents))
-         (n (primitive-epoll-wait (epoll-fd epoll) eventsv (get-timeout)))
+         (write-pipe-fd (fileno (epoll-wake-write-pipe epoll)))
+         (n (primitive-epoll-wait (epoll-fd epoll) write-pipe-fd
+                                  eventsv (get-timeout)))
          (read-pipe (epoll-wake-read-pipe epoll))
          (read-pipe-fd (fileno read-pipe)))
     ;; If we received `maxevents' events, it means that probably there

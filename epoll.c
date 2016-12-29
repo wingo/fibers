@@ -101,13 +101,14 @@ scm_primitive_epoll_ctl (SCM epfd, SCM op, SCM fd, SCM events)
    which may be zero if no files triggered wakeups within TIMEOUT
    milliseconds.  */
 static SCM
-scm_primitive_epoll_wait (SCM epfd, SCM eventsv, SCM timeout)
+scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM eventsv, SCM timeout)
 #define FUNC_NAME "primitive-epoll-wait"
 {
-  int c_epfd, maxevents, rv, c_timeout;
+  int c_epfd, c_wakefd, maxevents, rv, c_timeout;
   struct epoll_event *events;
 
   c_epfd = scm_to_int (epfd);
+  c_wakefd = scm_to_int (wakefd);
 
   SCM_VALIDATE_BYTEVECTOR (SCM_ARG2, eventsv);
   if (SCM_UNLIKELY (SCM_BYTEVECTOR_LENGTH (eventsv) % sizeof (*events)))
@@ -117,16 +118,23 @@ scm_primitive_epoll_wait (SCM epfd, SCM eventsv, SCM timeout)
   maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (*events);
   c_timeout = SCM_UNBNDP (timeout) ? -1 : scm_to_int (timeout);
 
- retry:
-  rv = epoll_wait (c_epfd, events, maxevents, c_timeout);
-  if (rv == -1)
+  if (scm_c_prepare_to_wait_on_fd (c_wakefd))
+    rv = 0;
+  else
     {
-      if (errno == EINTR)
+      int err;
+      rv = epoll_wait (c_epfd, events, maxevents, c_timeout);
+      if (rv < 0)
+        err = errno;
+      scm_c_wait_finished ();
+      if (rv < 0)
         {
-          scm_async_tick ();
-          goto retry;
+          errno = err;
+          if (err == EINTR)
+            rv = 0;
+          else
+            SCM_SYSERROR;
         }
-      SCM_SYSERROR;
     }
 
   return scm_from_int (rv);
@@ -144,7 +152,7 @@ init_fibers_epoll (void)
                       scm_primitive_epoll_create);
   scm_c_define_gsubr ("primitive-epoll-ctl", 3, 1, 0,
                       scm_primitive_epoll_ctl);
-  scm_c_define_gsubr ("primitive-epoll-wait", 3, 1, 0,
+  scm_c_define_gsubr ("primitive-epoll-wait", 4, 1, 0,
                       scm_primitive_epoll_wait);
   scm_c_define ("%sizeof-struct-epoll-event",
                 scm_from_size_t (sizeof (struct epoll_event)));
