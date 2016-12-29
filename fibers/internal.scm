@@ -33,6 +33,7 @@
             with-scheduler
             scheduler-name
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
+            scheduler-remote-peers
             run-scheduler
             destroy-scheduler
 
@@ -96,7 +97,7 @@ name is known."
   ;; atomic parameter of thread
   (kernel-thread scheduler-kernel-thread)
   ;; vector of sched
-  (remote-peers scheduler-remote-peers))
+  (remote-peers scheduler-remote-peers set-scheduler-remote-peers!))
 
 (define-record-type <fiber>
   (make-fiber scheduler continuation)
@@ -118,7 +119,7 @@ name is known."
              (unless (eq? prev init)
                (error "owned by other thread" prev))))))))
 
-(define* (make-scheduler #:key (remote-peers #()))
+(define* (make-scheduler #:key parallelism)
   "Make a new scheduler in which to run fibers."
   (let ((epfd (epoll-create))
         (active-fd-count 0)
@@ -129,12 +130,22 @@ name is known."
         (timers (make-psq (match-lambda*
                             (((t1 . c1) (t2 . c2)) (< t1 t2)))
                           <))
-        (kernel-thread (make-atomic-parameter #f)))
+        (kernel-thread (make-atomic-parameter #f))
+        (remote-peers (if parallelism
+                          (list->vector (map (lambda (_) (make-scheduler))
+                                             (iota (1- parallelism))))
+                          #())))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
                                   next-runqueue current-runqueue
                                   sources timers kernel-thread
                                   remote-peers)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
+      (let lp ((i 0))
+        (when (< i (vector-length remote-peers))
+          (let ((peers (vector-copy remote-peers)))
+            (vector-set! peers i sched)
+            (set-scheduler-remote-peers! (vector-ref remote-peers i) peers))
+          (lp (1+ i))))
       sched)))
 
 (define-syntax-rule (with-scheduler scheduler body ...)
