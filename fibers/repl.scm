@@ -119,7 +119,7 @@ Spawn a new fiber that runs EXP.
 If SCHED is given, the fiber will be spawned on the given scheduler."
   (let ((thunk (repl-prepare-eval-thunk repl (repl-parse repl form)))
         (sched (repl-ensure-current-sched repl)))
-    (create-fiber sched thunk)))
+    (spawn-fiber thunk sched)))
 
 (define-meta-command ((kill-fiber fibers) repl fiber)
   "kill-fiber FIBER
