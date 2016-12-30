@@ -77,28 +77,52 @@
                      (parallelism (current-processor-count))
                      (install-suspendable-ports? #t))
   (when install-suspendable-ports? (install-suspendable-ports!))
-  (let* ((fresh-scheduler? (not scheduler))
-         (scheduler (or scheduler
-                        (make-scheduler #:parallelism parallelism)))
-         (ret (make-atomic-box #f))
-         (finished? (lambda () (atomic-box-ref ret))))
-    (spawn-fiber (lambda ()
-                   (call-with-values (or init values)
-                     (lambda vals (atomic-box-set! ret vals))))
-                 scheduler)
-    (when fresh-scheduler?
-      (start-auxiliary-threads scheduler hz finished?))
-    (%run-fibers scheduler hz finished?)
-    (when fresh-scheduler?
+  (cond
+   (scheduler
+    (let ((finished? (lambda () #f)))
+      (when init (spawn-fiber init scheduler))
+      (%run-fibers scheduler hz finished?)))
+   (else
+    (let* ((scheduler (make-scheduler #:parallelism parallelism))
+           (ret (make-atomic-box #f))
+           (finished? (lambda () (atomic-box-ref ret))))
+      (unless init
+        (error "run-fibers requires initial fiber thunk when creating sched"))
+      (spawn-fiber (lambda ()
+                     (call-with-values init
+                       (lambda vals (atomic-box-set! ret vals))))
+                   scheduler)
+      (start-auxiliary-threads scheduler hz finished?)
+      (%run-fibers scheduler hz finished?)
       (stop-auxiliary-threads scheduler)
-      (destroy-scheduler scheduler))
-    (apply values (atomic-box-ref ret))))
+      (destroy-scheduler scheduler)
+      (apply values (atomic-box-ref ret))))))
 
-(define (current-fiber-scheduler)
-  (match (current-fiber)
-    (#f (error "No scheduler current; call within run-fibers instead"))
-    (fiber (fiber-scheduler fiber))))
-
-(define* (spawn-fiber thunk #:optional (sched (current-fiber-scheduler))
-                      #:key (dynamic-state (current-dynamic-state)))
-  (create-fiber sched thunk dynamic-state))
+(define* (spawn-fiber thunk #:optional sched #:key parallel?)
+  (define (choose-sched sched)
+    (let* ((remote (scheduler-remote-peers sched))
+           (count (vector-length remote))
+           (idx (random (1+ count))))
+      (if (= count idx)
+          sched
+          (vector-ref remote idx))))
+  (define (spawn sched thunk)
+    (create-fiber (if parallel? (choose-sched sched) sched)
+                  thunk
+                  (current-dynamic-state)))
+  (cond
+   (sched
+    ;; When a scheduler is passed explicitly, it could be there is no
+    ;; current fiber; in that case the dynamic state probably doesn't
+    ;; have the right right current-read-waiter /
+    ;; current-write-waiter, so wrap the thunk.
+    (spawn sched
+           (lambda ()
+             (current-read-waiter wait-for-readable)
+             (current-write-waiter wait-for-writable)
+             (thunk))))
+   ((current-fiber)
+    => (lambda (fiber)
+         (spawn (fiber-scheduler fiber) thunk)))
+   (else
+    (error "No scheduler current; call within run-fibers instead"))))

@@ -65,7 +65,7 @@
 
 (assert-equal #f #f)
 (assert-terminates #t)
-(assert-terminates (run-fibers))
+(assert-equal #f (false-if-exception (begin (run-fibers) #t)))
 (assert-run-fibers-terminates (sleep 1))
 (assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () #t))))
 (assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () #t))))
@@ -73,6 +73,11 @@
 (assert-run-fibers-terminates (do-times 1000 (spawn-fiber (lambda () #t))))
 (assert-run-fibers-terminates (do-times 10000 (spawn-fiber (lambda () #t))))
 (assert-run-fibers-terminates (do-times 100000 (spawn-fiber (lambda () #t))))
+(assert-run-fibers-terminates (do-times 100000
+                                        (spawn-fiber (lambda () #t) #:parallel? #t)))
+(define (loop-to-1e4) (let lp ((i 0)) (when (< i #e1e4) (lp (1+ i)))))
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4)))
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4 #:parallel? #t)))
 (assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () (sleep 1)))))
 (assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () (sleep 1)))))
 (assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () (sleep 1)))))
