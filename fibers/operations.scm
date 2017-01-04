@@ -69,7 +69,7 @@
   (wrap-fn base-op-wrap-fn)
   ;; () -> (thunk | #f)
   (try-fn base-op-try-fn)
-  ;; (op-state resume-k wrap-fn) -> ()
+  ;; (op-state sched resume-k) -> ()
   (block-fn base-op-block-fn))
 
 (define-record-type <choice-op>
@@ -120,17 +120,24 @@ succeeds, will succeed with one and only one of the sub-operations
 (define (perform-operation op)
   "Perform the operation @var{op} and return the resulting values.  If
 the operation cannot complete directly, block until it can complete."
+  (define (wrap-resume resume wrap-fn)
+    (if wrap-fn
+        (lambda (thunk)
+          (resume (lambda ()
+                    (call-with-values thunk wrap-fn))))
+        resume))
+
   (define (block sched resume)
     (let ((flag (make-op-state)))
       (match op
         (($ <base-op> wrap-fn try-fn block-fn)
-         (block-fn flag sched resume wrap-fn))
+         (block-fn flag sched (wrap-resume resume wrap-fn)))
         (($ <choice-op> base-ops)
          (let lp ((i 0))
            (when (< i (vector-length base-ops))
              (match (vector-ref base-ops i)
                (($ <base-op> wrap-fn try-fn block-fn)
-                (block-fn flag sched resume wrap-fn)))
+                (block-fn flag sched (wrap-resume resume wrap-fn))))
              (lp (1+ i))))))))
 
   (define (suspend)

@@ -73,7 +73,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
              ;; Return #f if the getq was empty.
              (and getq*
                   (match item
-                    (#(get-flag resume-get get-wrap-fn)
+                    (#(get-flag resume-get)
                      (let spin ()
                        (match (atomic-box-compare-and-swap! get-flag 'W 'S)
                          ('W
@@ -85,10 +85,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
                           ;; performs any other operation on this
                           ;; channel.
                           (maybe-commit)
-                          (resume-get (if get-wrap-fn
-                                          (lambda ()
-                                            (get-wrap-fn message))
-                                          (lambda () message)))
+                          (resume-get (lambda () message))
                           ;; Continue directly.
                           (lambda () (values)))
                          ;; Get operation temporarily busy; try again.
@@ -99,16 +96,16 @@ with a receiver fiber to send @var{message} over @var{channel}."
                          ;; try again next time if no other fiber
                          ;; handled it already.
                          ('S (try (maybe-commit))))))))))))
-     (define (block-fn put-flag put-sched resume-put put-wrap-fn)
+     (define (block-fn put-flag put-sched resume-put)
        ;; We have suspended the current fiber; arrange for the fiber
        ;; to be resumed by a get operation by adding it to the channel's
        ;; putq.
        (define (not-me? item)
          (match item
-           (#(get-flag resume-get get-wrap-fn)
+           (#(get-flag resume-get)
             (not (eq? put-flag get-flag)))))
        ;; First, publish this put operation.
-       (enqueue! putq-box (vector put-flag resume-put put-wrap-fn message))
+       (enqueue! putq-box (vector put-flag resume-put message))
        ;; In the try phase, we scanned the getq for a get operation,
        ;; but we were unable to perform any of them.  Since then,
        ;; there might be a new get operation on the queue.  However
@@ -131,7 +128,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
              ;; We only have to service the getq if it is non-empty.
              (when getq*
                (match item
-                 (#(get-flag resume-get get-wrap-fn)
+                 (#(get-flag resume-get)
                   (match (atomic-box-ref get-flag)
                     ('S
                      ;; This get operation has already synchronized;
@@ -151,10 +148,8 @@ with a receiver fiber to send @var{message} over @var{channel}."
                              ;; getq, and resume both fibers.
                              (atomic-box-set! put-flag 'S)
                              (maybe-commit)
-                             (resume-get (if get-wrap-fn
-                                             (lambda () (get-wrap-fn message))
-                                             (lambda () message)))
-                             (resume-put (or put-wrap-fn values))
+                             (resume-get (lambda () message))
+                             (resume-put values)
                              (values))
                             ('C
                              ;; Other fiber trying to do the same
@@ -195,7 +190,7 @@ with a sender fiber to receive one value from @var{channel}."
              ;; Return #f if the putq was empty.
              (and putq*
                   (match item
-                    (#(put-flag resume-put put-wrap-fn message)
+                    (#(put-flag resume-put message)
                      (let spin ()
                        (match (atomic-box-compare-and-swap! put-flag 'W 'S)
                          ('W
@@ -205,7 +200,7 @@ with a sender fiber to receive one value from @var{channel}."
                           ;; it before synchronizing any other
                           ;; operation on this channel.
                           (maybe-commit)
-                          (resume-put (or put-wrap-fn values))
+                          (resume-put values)
                           ;; Continue directly.
                           (lambda () message))
                          ;; Put operation temporarily busy; try again.
@@ -216,16 +211,16 @@ with a sender fiber to receive one value from @var{channel}."
                          ;; try again next time if no other fiber
                          ;; handled it already.
                          ('S (try (maybe-commit))))))))))))
-     (define (block-fn get-flag get-sched resume-get get-wrap-fn)
+     (define (block-fn get-flag get-sched resume-get)
        ;; We have suspended the current fiber; arrange for the fiber
        ;; to be resumed by a put operation by adding it to the
        ;; channel's getq.
        (define (not-me? item)
          (match item
-           (#(put-flag resume-put put-wrap-fn message)
+           (#(put-flag resume-put message)
             (not (eq? get-flag put-flag)))))
        ;; First, publish this get operation.
-       (enqueue! getq-box (vector get-flag resume-get get-wrap-fn))
+       (enqueue! getq-box (vector get-flag resume-get))
        ;; In the try phase, we scanned the putq for a live put
        ;; operation, but we were unable to synchronize.  Since then,
        ;; there might be a new operation on the putq.  However only
@@ -248,7 +243,7 @@ with a sender fiber to receive one value from @var{channel}."
              ;; We only have to service the putq if it is non-empty.
              (when putq*
                (match item
-                 (#(put-flag resume-put put-wrap-fn message)
+                 (#(put-flag resume-put message)
                   (match (atomic-box-ref put-flag)
                     ('S
                      ;; This put operation has already synchronized;
@@ -269,10 +264,8 @@ with a sender fiber to receive one value from @var{channel}."
                              ;; fibers for resumption.
                              (atomic-box-set! get-flag 'S)
                              (maybe-commit)
-                             (resume-get (if get-wrap-fn
-                                             (lambda () (get-wrap-fn message))
-                                             (lambda () message)))
-                             (resume-put (or put-wrap-fn values))
+                             (resume-get (lambda () message))
+                             (resume-put values)
                              (values))
                             ('C
                              ;; Other fiber trying to do the same
