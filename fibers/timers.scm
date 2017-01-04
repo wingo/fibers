@@ -22,9 +22,25 @@
   #:use-module (fibers operations)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 threads)
   #:export (wait-operation
             timer-operation)
   #:replace (sleep))
+
+(define *timer-sched* (make-atomic-box #f))
+
+(define (timer-sched)
+  (or (atomic-box-ref *timer-sched*)
+      (let ((sched (make-scheduler)))
+        (cond
+         ((atomic-box-compare-and-swap! *timer-sched* #f sched))
+         (else
+          ;; FIXME: Would be nice to clean up this thread at some point.
+          (call-with-new-thread
+           (lambda ()
+             (define (finished?) #f)
+             (with-scheduler sched (run-scheduler sched finished?))))
+          sched)))))
 
 (define (timer-operation expiry)
   "Make an operation that will succeed when the current time is
@@ -40,7 +56,13 @@ units.  The operation will succeed with no values."
                              ('W (resume values))
                              ('C (timer))
                              ('S #f)))
-                         (add-timer sched expiry timer))))
+                         (if sched
+                             (add-timer sched expiry timer)
+                             (create-fiber (timer-sched)
+                                           (lambda ()
+                                             (perform-operation (timer-operation expiry))
+                                             (timer))
+                                           (current-dynamic-state))))))
 
 (define (wait-operation seconds)
   "Make an operation that will succeed with no values when

@@ -51,6 +51,7 @@ epoll_la_LDFLAGS = -export-dynamic -module
 TESTS = \
 	tests/basic.scm \
 	tests/channels.scm \
+	tests/foreign.scm \
 	tests/parameters.scm \
 	tests/preemption.scm
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s

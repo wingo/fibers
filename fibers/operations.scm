@@ -141,12 +141,39 @@ the operation cannot complete directly, block until it can complete."
              (lp (1+ i))))))))
 
   (define (suspend)
+    ;; Two cases.  If there is a current fiber, then we suspend the
+    ;; current fiber and arrange to restart it when the operation
+    ;; succeeds.  Otherwise we block the current thread until the
+    ;; operation succeeds, to allow for communication between fibers
+    ;; and foreign threads.
     (if (current-fiber)
         (suspend-current-fiber
          (lambda (fiber)
            (define (resume thunk) (resume-fiber fiber thunk))
            (block (fiber-scheduler fiber) resume)))
-        (error "unimplemented")))
+        (let ((k #f)
+              (thread (current-thread))
+              (mutex (make-mutex))
+              (condvar (make-condition-variable)))
+          (define (resume thunk)
+            (cond
+             ((eq? (current-thread) thread)
+              (set! k thunk))
+             (else
+              (lock-mutex mutex)
+              (set! k thunk)
+              (signal-condition-variable condvar)
+              (unlock-mutex mutex))))
+          (lock-mutex mutex)
+          (block #f resume)
+          (let lp ()
+            (cond
+             (k
+              (unlock-mutex mutex)
+              (k))
+             (else
+              (wait-condition-variable condvar mutex)
+              (lp)))))))
 
   ;; First, try to sync on an op.  If no op syncs, block.
   (match op
