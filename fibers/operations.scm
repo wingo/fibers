@@ -120,26 +120,32 @@ succeeds, will succeed with one and only one of the sub-operations
 (define (perform-operation op)
   "Perform the operation @var{op} and return the resulting values.  If
 the operation cannot complete directly, block until it can complete."
-  (define (block)
-    (suspend-current-fiber
-     (lambda (fiber)
-       (let ((flag (make-op-state)))
-         (match op
-           (($ <base-op> wrap-fn try-fn block-fn)
-            (block-fn flag fiber wrap-fn))
-           (($ <choice-op> base-ops)
-            (let lp ((i 0))
-              (when (< i (vector-length base-ops))
-                (match (vector-ref base-ops i)
-                  (($ <base-op> wrap-fn try-fn block-fn)
-                   (block-fn flag fiber wrap-fn)))
-                (lp (1+ i))))))))))
+  (define (block sched resume)
+    (let ((flag (make-op-state)))
+      (match op
+        (($ <base-op> wrap-fn try-fn block-fn)
+         (block-fn flag sched resume wrap-fn))
+        (($ <choice-op> base-ops)
+         (let lp ((i 0))
+           (when (< i (vector-length base-ops))
+             (match (vector-ref base-ops i)
+               (($ <base-op> wrap-fn try-fn block-fn)
+                (block-fn flag sched resume wrap-fn)))
+             (lp (1+ i))))))))
+
+  (define (suspend)
+    (if (current-fiber)
+        (suspend-current-fiber
+         (lambda (fiber)
+           (define (resume thunk) (resume-fiber fiber thunk))
+           (block (fiber-scheduler fiber) resume)))
+        (error "unimplemented")))
 
   ;; First, try to sync on an op.  If no op syncs, block.
   (match op
     (($ <base-op> wrap-fn try-fn)
      (match (try-fn)
-       (#f (block))
+       (#f (suspend))
        (thunk
         (if wrap-fn
             (call-with-values thunk wrap-fn)
@@ -157,4 +163,4 @@ the operation cannot complete directly, block until it can complete."
                    (if wrap-fn
                        (call-with-values thunk wrap-fn)
                        (thunk))))))
-             (block)))))))
+             (suspend)))))))

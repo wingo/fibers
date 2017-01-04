@@ -34,13 +34,13 @@ units.  The operation will succeed with no values."
                        (lambda ()
                          (and (< expiry (get-internal-real-time))
                               values))
-                       (lambda (flag fiber wrap-fn)
-                         (define (get-resume-thunk)
+                       (lambda (flag sched resume wrap-fn)
+                         (define (timer)
                            (match (atomic-box-compare-and-swap! flag 'W 'S)
-                             ('W (or wrap-fn values))
-                             ('C (get-resume-thunk))
+                             ('W (resume (or wrap-fn values)))
+                             ('C (timer))
                              ('S #f)))
-                         (resume-on-timer fiber expiry get-resume-thunk))))
+                         (add-timer sched expiry timer))))
 
 (define (wait-operation seconds)
   "Make an operation that will succeed with no values when

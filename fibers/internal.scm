@@ -39,7 +39,7 @@
 
             resume-on-readable-fd
             resume-on-writable-fd
-            resume-on-timer
+            add-timer
 
             create-fiber
             (current-fiber/public . current-fiber)
@@ -445,18 +445,10 @@ becomes readable."
 becomes writable."
   (resume-on-fd-events fd EPOLLOUT fiber))
 
-(define (resume-on-timer fiber expiry get-thunk)
-  "Arrange to resume @var{fiber} when the absolute real time is
-greater than or equal to @var{expiry}, expressed in internal time
-units.  The fiber will be resumed with the result of calling
-@var{get-thunk}.  If @var{get-thunk} returns @code{#f}, that indicates
-that some other operation performed this operation first, and so no
-resume is performed."
-  (let ((sched (fiber-scheduler fiber)))
-    (define (maybe-resume)
-      (let ((thunk (get-thunk)))
-        (when thunk (resume-fiber fiber thunk))))
-    (set-scheduler-timers! sched
-                           (psq-set (scheduler-timers sched)
-                                    (cons expiry maybe-resume)
-                                    expiry))))
+(define (add-timer sched expiry thunk)
+  "Arrange to call @var{thunk} when the absolute real time is greater
+than or equal to @var{expiry}, expressed in internal time units."
+  (set-scheduler-timers! sched
+                         (psq-set (scheduler-timers sched)
+                                  (cons expiry thunk)
+                                  expiry)))
