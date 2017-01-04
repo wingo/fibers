@@ -22,7 +22,6 @@
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 control)
   #:use-module (ice-9 match)
-  #:use-module (ice-9 suspendable-ports)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-9 gnu)
   #:use-module (rnrs bytevectors)
@@ -125,9 +124,7 @@ epoll wait (if appropriate)."
     ;; can avoid it if the epoll is guaranteed to see that the
     ;; runqueue is not empty before it goes to poll next time.
     ('waiting
-     (let/ec cancel
-       (parameterize ((current-write-waiter cancel))
-         (put-u8 (epoll-wake-write-pipe epoll) #x00))))
+     (primitive-epoll-wake (fileno (epoll-wake-write-pipe epoll))))
     ('not-waiting #t)
     ('dead (error "epoll instance is dead"))))
 
@@ -150,10 +147,9 @@ epoll wait (if appropriate)."
   (let* ((maxevents (epoll-maxevents epoll))
          (eventsv (ensure-epoll-eventsv epoll maxevents))
          (write-pipe-fd (fileno (epoll-wake-write-pipe epoll)))
-         (n (primitive-epoll-wait (epoll-fd epoll) write-pipe-fd
-                                  eventsv (get-timeout)))
-         (read-pipe (epoll-wake-read-pipe epoll))
-         (read-pipe-fd (fileno read-pipe)))
+         (read-pipe-fd (fileno (epoll-wake-read-pipe epoll)))
+         (n (primitive-epoll-wait (epoll-fd epoll) write-pipe-fd read-pipe-fd
+                                  eventsv (get-timeout))))
     ;; If we received `maxevents' events, it means that probably there
     ;; are more active fd's in the queue that we were unable to
     ;; receive.  Expand our event buffer in that case.
@@ -164,13 +160,5 @@ epoll wait (if appropriate)."
       (if (< i n)
           (let ((fd (bytevector-s32-native-ref eventsv (fd-offset i)))
                 (events (bytevector-u32-native-ref eventsv (events-offset i))))
-            (lp (if (eqv? fd read-pipe-fd)
-                    (begin
-                      (let/ec cancel
-                        ;; Slurp off any wake bytes from the fd.
-                        (parameterize ((current-read-waiter cancel))
-                          (let lp () (get-u8 read-pipe) (lp))))
-                      seed)
-                    (folder fd events seed))
-                (1+ i)))
+            (lp (folder fd events seed) (1+ i)))
           seed))))

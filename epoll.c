@@ -32,6 +32,22 @@
 /* {EPoll}
  */
 
+static SCM
+scm_primitive_epoll_wake (SCM wakefd)
+#define FUNC_NAME "primitive-epoll-wake"
+{
+  int c_fd;
+  char zero = 0;
+
+  c_fd = scm_to_int (wakefd);
+
+  if (write (c_fd, &zero, 1) <= 0 && errno != EWOULDBLOCK && errno != EAGAIN)
+    SCM_SYSERROR;
+
+  return SCM_UNSPECIFIED;
+}
+#undef FUNC_NAME
+
 /* EPoll is a newer Linux interface designed for sets of file
    descriptors that are mostly in a dormant state.  These primitives
    wrap the epoll interface on a very low level.
@@ -101,14 +117,16 @@ scm_primitive_epoll_ctl (SCM epfd, SCM op, SCM fd, SCM events)
    which may be zero if no files triggered wakeups within TIMEOUT
    milliseconds.  */
 static SCM
-scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM eventsv, SCM timeout)
+scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
+                          SCM eventsv, SCM timeout)
 #define FUNC_NAME "primitive-epoll-wait"
 {
-  int c_epfd, c_wakefd, maxevents, rv, c_timeout;
+  int c_epfd, c_wakefd, c_wokefd, maxevents, rv, c_timeout;
   struct epoll_event *events;
 
   c_epfd = scm_to_int (epfd);
   c_wakefd = scm_to_int (wakefd);
+  c_wokefd = scm_to_int (wokefd);
 
   SCM_VALIDATE_BYTEVECTOR (SCM_ARG2, eventsv);
   if (SCM_UNLIKELY (SCM_BYTEVECTOR_LENGTH (eventsv) % sizeof (*events)))
@@ -116,7 +134,7 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM eventsv, SCM timeout)
 
   events = (struct epoll_event *) SCM_BYTEVECTOR_CONTENTS (eventsv);
   maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (*events);
-  c_timeout = SCM_UNBNDP (timeout) ? -1 : scm_to_int (timeout);
+  c_timeout = scm_to_int (timeout);
 
   if (scm_c_prepare_to_wait_on_fd (c_wakefd))
     rv = 0;
@@ -135,6 +153,27 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM eventsv, SCM timeout)
           else
             SCM_SYSERROR;
         }
+      else
+        {
+          /* Drain woke fd if appropriate.  Doing it from Scheme is a
+             bit gnarly as we don't know if suspendable ports are
+             enabled or not.  */
+          int i;
+          for (i = 0; i < rv; i++)
+            if (events[i].data.fd == c_wokefd)
+              {
+                char zeroes[32];
+                /* Remove wake fd from result set.  */
+                rv--;
+                memmove (events + i,
+                         events + i + 1,
+                         (rv - i) * sizeof (*events));
+                /* Drain fd and ignore errors. */
+                while (read (c_wokefd, zeroes, sizeof zeroes) == sizeof zeroes)
+                  ;
+                break;
+              }
+        }
     }
 
   return scm_from_int (rv);
@@ -148,11 +187,13 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM eventsv, SCM timeout)
 void
 init_fibers_epoll (void)
 {
+  scm_c_define_gsubr ("primitive-epoll-wake", 1, 0, 0,
+                      scm_primitive_epoll_wake);
   scm_c_define_gsubr ("primitive-epoll-create", 1, 0, 0,
                       scm_primitive_epoll_create);
   scm_c_define_gsubr ("primitive-epoll-ctl", 3, 1, 0,
                       scm_primitive_epoll_ctl);
-  scm_c_define_gsubr ("primitive-epoll-wait", 4, 1, 0,
+  scm_c_define_gsubr ("primitive-epoll-wait", 5, 0, 0,
                       scm_primitive_epoll_wait);
   scm_c_define ("%sizeof-struct-epoll-event",
                 scm_from_size_t (sizeof (struct epoll_event)));
