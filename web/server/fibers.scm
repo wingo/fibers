@@ -34,12 +34,9 @@
   #:use-module (ice-9 binary-ports)
   #:use-module (ice-9 suspendable-ports)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 threads)
   #:use-module (fibers)
-  #:use-module ((fibers internal)
-                #:select (make-scheduler
-                          destroy-scheduler
-                          suspend-current-fiber
-                          resume-fiber)))
+  #:use-module (fibers channels))
 
 (define (set-nonblocking! port)
   (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
@@ -54,10 +51,10 @@
     sock))
 
 (define-record-type <server>
-  (make-server scheduler have-request-prompt)
+  (make-server request-channel thread)
   server?
-  (scheduler server-scheduler)
-  (have-request-prompt server-have-request-prompt))
+  (request-channel server-request-channel)
+  (thread server-thread))
 
 ;; -> server
 (define* (open-server #:key
@@ -76,10 +73,13 @@
   (listen socket 1024)
   (set-nonblocking! socket)
   (sigaction SIGPIPE SIG_IGN)
-  (let* ((sched (make-scheduler))
-         (server (make-server sched (make-prompt-tag "have-request"))))
-    (spawn-fiber (lambda () (socket-loop server socket)) sched)
-    server))
+  (let* ((request-channel (make-channel))
+         (thread (call-with-new-thread
+                  (lambda ()
+                    (run-fibers
+                     (lambda ()
+                       (socket-loop socket request-channel)))))))
+    (make-server request-channel thread)))
 
 (define (bad-request msg . args)
   (throw 'bad-request msg args))
@@ -98,35 +98,34 @@
 (define (client-loop client have-request)
   (with-throw-handler #t
     (lambda ()
-      (let loop ()
-        (cond
-         ((eof-object? (lookahead-u8 client))
-          (close-port client))
-         (else
-          (call-with-values
-              (lambda ()
-                (catch #t
-                  (lambda ()
-                    (let* ((request (read-request client))
-                           (body (read-request-body request)))
-                      (suspend-current-fiber
-                       (lambda (fiber)
-                         (have-request fiber request body)))))
-                  (lambda (key . args)
-                    (display "While reading request:\n" (current-error-port))
-                    (print-exception (current-error-port) #f key args)
-                    (values (build-response #:version '(1 . 0) #:code 400
-                                            #:headers '((content-length . 0)))
-                            #vu8()))))
-            (lambda (response body)
-              (write-response response client)
-              (when body
-                (put-bytevector client body))
-              (force-output client)
-              (if (and (keep-alive? response)
-                       (not (eof-object? (peek-char client))))
-                  (loop)
-                  (close-port client))))))))
+      (let ((response-channel (make-channel)))
+        (let loop ()
+          (cond
+           ((eof-object? (lookahead-u8 client))
+            (close-port client))
+           (else
+            (call-with-values
+                (lambda ()
+                  (catch #t
+                    (lambda ()
+                      (let* ((request (read-request client))
+                             (body (read-request-body request)))
+                        (have-request response-channel request body)))
+                    (lambda (key . args)
+                      (display "While reading request:\n" (current-error-port))
+                      (print-exception (current-error-port) #f key args)
+                      (values (build-response #:version '(1 . 0) #:code 400
+                                              #:headers '((content-length . 0)))
+                              #vu8()))))
+              (lambda (response body)
+                (write-response response client)
+                (when body
+                  (put-bytevector client body))
+                (force-output client)
+                (if (and (keep-alive? response)
+                         (not (eof-object? (peek-char client))))
+                    (loop)
+                    (close-port client)))))))))
     (lambda (k . args)
       (catch #t
         (lambda () (close-port client))
@@ -134,10 +133,12 @@
           (display "While closing port:\n" (current-error-port))
           (print-exception (current-error-port) #f k args))))))
 
-(define (socket-loop server socket)
-  (define (have-request client-fiber request body)
-    (abort-to-prompt (server-have-request-prompt server)
-                     client-fiber request body))
+(define (socket-loop socket request-channel)
+  (define (have-request response-channel request body)
+    (put-message request-channel (vector response-channel request body))
+    (match (get-message response-channel)
+      (#(response body)
+       (values response body))))
   (let loop ()
     (match (accept socket)
       ((client . sockaddr)
@@ -149,27 +150,27 @@
        ;; TCP_NODELAY is not defined on this platform.
        (false-if-exception
         (setsockopt client IPPROTO_TCP TCP_NODELAY 0))
-       (spawn-fiber (lambda () (client-loop client have-request)))
+       (spawn-fiber (lambda () (client-loop client have-request))
+                    #:parallel? #t)
        (loop)))))
 
 ;; -> (client request body | #f #f #f)
 (define (server-read server)
-  (call-with-prompt
-   (server-have-request-prompt server)
-   (lambda ()
-     (run-fibers #:scheduler (server-scheduler server)
-                 #:install-suspendable-ports? #f))
-   (lambda (k client request body)
-     (values client request body))))
+  (match (get-message (server-request-channel server))
+    (#(response-channel request body)
+     (let ((client response-channel))
+       (values client request body)))))
 
 ;; -> 0 values
 (define (server-write server client response body)
-  (resume-fiber client (lambda () (values response body)))
+  (let ((response-channel client))
+    (put-message response-channel (vector response body)))
   (values))
 
 ;; -> unspecified values
 (define (close-server server)
-  (destroy-scheduler (server-scheduler server)))
+  (cancel-thread (server-thread server))
+  (join-thread (server-thread server)))
 
 (define-server-impl fibers
   open-server
