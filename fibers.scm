@@ -92,9 +92,10 @@
                      (call-with-values init
                        (lambda vals (atomic-box-set! ret vals))))
                    scheduler)
-      (start-auxiliary-threads scheduler hz finished?)
-      (%run-fibers scheduler hz finished?)
-      (stop-auxiliary-threads scheduler)
+      (dynamic-wind
+        (lambda () (start-auxiliary-threads scheduler hz finished?))
+        (lambda () (%run-fibers scheduler hz finished?))
+        (lambda () (stop-auxiliary-threads scheduler)))
       (destroy-scheduler scheduler)
       (apply values (atomic-box-ref ret))))))
 
