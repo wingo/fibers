@@ -119,11 +119,11 @@ name is known."
              (unless (eq? prev init)
                (error "owned by other thread" prev))))))))
 
-(define* (make-scheduler #:key parallelism)
+(define* (make-scheduler #:key parallelism
+                         (prompt-tag (make-prompt-tag "fibers")))
   "Make a new scheduler in which to run fibers."
   (let ((epfd (epoll-create))
         (active-fd-count 0)
-        (prompt-tag (make-prompt-tag "fibers"))
         (next-runqueue (make-empty-stack))
         (current-runqueue (make-empty-stack))
         (sources (make-hash-table))
@@ -132,8 +132,10 @@ name is known."
                           <))
         (kernel-thread (make-atomic-parameter #f))
         (remote-peers (if parallelism
-                          (list->vector (map (lambda (_) (make-scheduler))
-                                             (iota (1- parallelism))))
+                          (list->vector
+                           (map (lambda (_)
+                                  (make-scheduler #:prompt-tag prompt-tag))
+                                (iota (1- parallelism))))
                           #())))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
                                   next-runqueue current-runqueue
@@ -273,23 +275,23 @@ thread."
                     seed))
   (run-timers sched))
 
-(define* (run-fiber fiber)
-  (call-with-prompt (scheduler-prompt-tag (fiber-scheduler fiber))
-    (lambda ()
-      (let ((thunk (fiber-continuation fiber)))
-        (set-fiber-continuation! fiber #f)
-        (thunk)))
-    (lambda (k after-suspend)
-      (set-fiber-continuation! fiber k)
-      (after-suspend fiber))))
-
 (define* (run-scheduler sched finished?)
   "Run @var{sched} until there are no more fibers ready to run, no
 file descriptors being waited on, and no more timers pending to run.
 Return zero values."
-  (let ((next (scheduler-next-runqueue sched))
+  (let ((tag (scheduler-prompt-tag sched))
+        (next (scheduler-next-runqueue sched))
         (cur (scheduler-current-runqueue sched))
         (peers (scheduler-remote-peers sched)))
+    (define (run-fiber fiber)
+      (call-with-prompt tag
+        (lambda ()
+          (let ((thunk (fiber-continuation fiber)))
+            (set-fiber-continuation! fiber #f)
+            (thunk)))
+        (lambda (k after-suspend)
+          (set-fiber-continuation! fiber k)
+          (after-suspend fiber))))
     (let next-turn ()
       (schedule-runnables-for-next-turn sched finished?)
       (stack-push-list! cur (reverse (stack-pop-all! next)))
