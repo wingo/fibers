@@ -51,10 +51,16 @@
         (set! interrupt-thread
           (call-with-new-thread
            (lambda ()
-             (let lp ()
-               (clock-nanosleep clockid period-nsecs)
-               (system-async-mark interrupt target-thread)
-               (lp)))))))
+             ;; It's possible that the thread has already exited
+             ;; before we start, and the clock-nanosleep fails
+             ;; directly.  Or who knows what happens when the target
+             ;; thread dies during the nanosleep?  Anyway just wrap
+             ;; the whole thing in a catch-all and punt.
+             (false-if-exception
+              (let lp ()
+                (clock-nanosleep clockid period-nsecs)
+                (system-async-mark interrupt target-thread)
+                (lp))))))))
 
     (define (stop-preemption!)
       (cancel-thread interrupt-thread))
