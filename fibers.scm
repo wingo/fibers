@@ -24,8 +24,7 @@
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
-  #:use-module ((ice-9 threads)
-                #:select (current-thread current-processor-count))
+  #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
@@ -73,7 +72,7 @@
           (lp (1+ i)))))))
 
 (define* (run-fibers #:optional (init #f)
-                     #:key (hz 0) (scheduler #f)
+                     #:key (hz 100) (scheduler #f)
                      (parallelism (current-processor-count))
                      (install-suspendable-ports? #t))
   (when install-suspendable-ports? (install-suspendable-ports!))
