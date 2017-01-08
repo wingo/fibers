@@ -40,12 +40,12 @@
     exp
     (format #t "ok\n")))
 
-(define-syntax-rule (assert-run-fibers-terminates exp)
+(define-syntax-rule (assert-run-fibers-terminates exp kw ...)
   (begin
     (format #t "assert run-fibers on ~s terminates: " 'exp)
     (force-output)
     (let ((start (get-internal-real-time)))
-      (call-with-values (lambda () (run-fibers (lambda () exp)))
+      (call-with-values (lambda () (run-fibers (lambda () exp) kw ...))
         (lambda vals
           (format #t "ok (~a s)\n" (/ (- (get-internal-real-time) start)
                                       1.0 internal-time-units-per-second))
@@ -116,7 +116,7 @@
                      (error "bad run order" run-order n))
                    (set! run-order (1+ n)))))
               (iota count)))
-  (assert-run-fibers-terminates (test-run-order 10)))
+  (assert-run-fibers-terminates (test-run-order 10) #:parallelism 1))
 
 (let ((run-order 0))
   (define (test-wakeup-order count)
@@ -127,7 +127,7 @@
                      (error "bad run order" run-order n))
                    (set! run-order (1+ n)))))
               (iota count)))
-  (assert-run-fibers-terminates (test-wakeup-order 10)))
+  (assert-run-fibers-terminates (test-wakeup-order 10) #:parallelism 1))
 
 (assert-run-fibers-returns (1) 1)
 
