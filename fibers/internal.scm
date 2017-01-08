@@ -333,17 +333,18 @@ stolen."
   (for-each kill-fiber (list-copy (scheduler-fibers sched)))
   (epoll-destroy (scheduler-epfd sched)))
 
-(define (create-fiber sched thunk dynamic-state)
+(define (create-fiber sched thunk)
   "Spawn a new fiber in @var{sched} with the continuation @var{thunk}.
-The fiber will be scheduled on the next turn.  During the fiber's
-extent, @var{dynamic-state} will be made current, isolating fluid and
-parameter mutations to this fiber."
+The fiber will be scheduled on the next turn.  @var{thunk} will run
+with a copy of the current dynamic state, isolating fluid and
+parameter mutations to the fiber."
   (let* ((fiber (make-fiber sched #f))
-         (thunk (lambda ()
-                  (with-dynamic-state dynamic-state
-                    (lambda ()
-                      (current-fiber fiber)
-                      (thunk))))))
+         (thunk (let ((dynamic-state (current-dynamic-state)))
+                  (lambda ()
+                    (with-dynamic-state dynamic-state
+                                        (lambda ()
+                                          (current-fiber fiber)
+                                          (thunk)))))))
     (nameset-add! fibers-nameset fiber)
     (schedule-fiber! fiber thunk)))
 

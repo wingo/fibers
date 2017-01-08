@@ -108,8 +108,7 @@
           (vector-ref remote idx))))
   (define (spawn sched thunk)
     (create-fiber (if parallel? (choose-sched sched) sched)
-                  thunk
-                  (current-dynamic-state)))
+                  thunk))
   (cond
    (sched
     ;; When a scheduler is passed explicitly, it could be there is no

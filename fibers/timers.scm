@@ -61,8 +61,7 @@ units.  The operation will succeed with no values."
                              (create-fiber (timer-sched)
                                            (lambda ()
                                              (perform-operation (timer-operation expiry))
-                                             (timer))
-                                           (current-dynamic-state))))))
+                                             (timer)))))))
 
 (define (wait-operation seconds)
   "Make an operation that will succeed with no values when
