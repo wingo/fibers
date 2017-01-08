@@ -100,10 +100,6 @@ We need to provide API for things like:
 ### total number of fibers ever created
 ### total number of fibers that ever exited
 
-## When would we want to migrate a fiber to a different thread?
-
-Also, how would we do it?
-
 ## Readline?  REPL over channels
 
 Currently the REPL runs in a blocking mode that basically takes over
