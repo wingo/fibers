@@ -114,16 +114,14 @@
 
 (define clock-nanosleep
   (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))
-         (proc (pointer->procedure int ptr (list clockid-t int '* '*)
-                                   #:return-errno? #t)))
+         (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
     (lambda* (clockid nsec #:key absolute? (buf (nsec->timespec nsec)))
-      (let ((flags (if absolute? TIMER_ABSTIME 0)))
-        (call-with-values (lambda () (proc clockid flags buf buf))
-          (lambda (ret errno)
-            (cond
-             ((zero? ret) (values #t 0))
-             ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
-             (else (error (strerror errno))))))))))
+      (let* ((flags (if absolute? TIMER_ABSTIME 0))
+             (ret (proc clockid flags buf buf)))
+        (cond
+         ((zero? ret) (values #t 0))
+         ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
+         (else (error (strerror ret))))))))
 
 ;; Quick little test to determine the resolution of clock-nanosleep on
 ;; different clock types, and how much CPU that takes.  Results on
