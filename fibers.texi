@@ -65,6 +65,7 @@ Fibers is a facility for lightweight concurrency in Guile.
 @menu
 * Context::               How do other systems handle concurrency?
 * Design::                Fibers' point in the design space.
+* Parallelism::           Faster throughput via more cores.
 @end menu
 
 @node Context
@@ -297,10 +298,10 @@ timeouts and condition variables.
 @section Fibers design
 
 In Fibers, the unit of computation is the @dfn{fiber}, a lightweight
-thread managed by Guile.  A fiber communicates with the world via
-normal Guile ports: @code{get-bytevector}, @code{put-string}, and all
-that.  Between themselves, fibers send and receive Scheme values over
-@dfn{channels}.
+thread managed by Guile.  A fiber communicates with the outside world
+via normal Guile ports: @code{get-bytevector}, @code{put-string}, and
+all that.  Within a single Guile process fibers communicate by sending
+and receiving Scheme values over @dfn{channels}.
 
 Whenever a fiber tries to read but no data is available, or tries to
 write but no data can be written, Guile will suspend the fiber and
@@ -319,7 +320,11 @@ state of their system.
 
 Currently in Fibers there is no ambient scheduler running; an error is
 signalled if a user calls @code{spawn-fiber} while not inside a
-@code{run-fibers} invocation. 
+@code{run-fibers} invocation.  However it is possible to communicate
+with fibers via channels or other Concurrent ML-like operations, even
+outside of a @code{run-fibers} invocation.  If an operation would
+block, it suspends the entire kernel thread until the operation can
+proceed.
 
 On the Scheme level, a fiber is a delimited continuation.  When a
 scheduler runs a fiber, it does so within a prompt; when the fiber
@@ -328,19 +333,18 @@ resulting continuation as part of the fiber's state.  In this way the
 per-fiber computational state overhead is just the size of the pending
 stack frames of the fiber, which can be just a handful of words.
 
-Currently fibers are pinned to the kernel thread in which they are
-created.  We should probably implement some kind of work-stealing
-behavior so that if you choose to devote multiple CPU cores to
-servicing fibers, that they can share the workload.
+By default, Fibers takes advantage of all available cores on your
+system.  @xref{Parallelism}, for full details.
 
 Ports are how fibers communicate with the world; channels are how
 fibers communicate with each other.  Channels are meeting places
-between fibers.  A fiber that goes to send a message over a channel
-will block until there is a fiber ready to receive the message, and
-vice versa.  Once both parties are ready, the message is exchanged and
-both parties resume.  There can be multiple fibers waiting to read and
-write on a channel, allowing channels to express not only pipelines
-but also common concurrency patterns such as fan-in and fan-out.
+between fibers, or between threads.  A fiber or thread that goes to
+send a message over a channel will block until there is a fiber or
+thread ready to receive the message, and vice versa.  Once both
+parties are ready, the message is exchanged and both parties resume.
+There can be multiple fibers and threads waiting to read and write on
+a channel, allowing channels to express not only pipelines but also
+common concurrency patterns such as fan-in and fan-out.
 
 Unlike Erlang channels, channels in Fibers are purely local and do not
 attempt to provide the illusion of network transparency.  This does
@@ -349,24 +353,21 @@ backpressure support than Erlang, blocking when no receiver is
 available to handle a message instead of letting the sender keep
 sending many messages.
 
-On the other hand, currently fibers default to not being preemptively
-scheduled.  A fiber will only suspend when it would block on channel
-receive or send, or on read or write on a port.  This would be an OK
-point in the design space if only one kernel thread could be running
-fibers at once, as in Node.js.  However given that this is not the
-case, Fibers does not have many of the concurrency invariants that
-such systems enjoy, so perhaps we should default to enabling
-preemption.
-
 To avoid starvation, a fiber can only run once within a ``turn''.
 Each turn starts with a poll on file descriptors of interest and marks
 the associated fibers as runnable.  If no fiber is runnable at the
 start of the poll, the poll call will ask the kernel to wait for a
-runnable descriptor.  Otherwise the poll call will ask the kernel to
-return immediately.  There is an additional FD added to the poll set
-that is used to interrupt a blocking poll, for example if a fiber
-becomes runnable due to I/O on a channel from a separate kernel thread
-while the first scheduler was still polling.
+runnable descriptor.  Otherwise the poll call will still check for
+runnable file descriptors, but also ask the kernel to return
+immediately.  There is an additional FD added to the poll set that is
+used to interrupt a blocking poll, for example if a fiber becomes
+runnable due to I/O on a channel from a separate kernel thread while
+the first scheduler was still polling.
+
+If a fiber runs for too long (by default, 10 milliseconds), it will be
+@dfn{preempted}: interrupted and rescheduled for the next turn.  The
+preemption frequency can be tuned by the user or turned off for a
+fully cooperative scheduling model.
 
 To enable expressive cross-kernel-thread communications, channel sends
 and receives are atomic and thread-safe.
@@ -376,12 +377,56 @@ scheduler, instate it on the thread, add some fibers, then run the
 scheduler.  That call to run the scheduler will only return when there
 there are no more fibers waiting to be scheduled.
 
+@node Parallelism
+@section Parallelism
+
+By default, Fibers will take advantage of all CPU cores available to
+it.  The degree of parallelism is controlled by the
+@code{#:parallelism} keyword argument to @code{run-fibers}, which
+defaults to @code{(current-processor-count)}.
+@xref{Threads,,,guile.info,Guile Reference Manual}, for more
+information on @code{current-processor-count}.  Pass a different
+argument to @code{#:parallelism} to choose a different degree of
+parallelism, for example @code{1} for single-threaded operation.  To
+allocate specific cores to a Guile process, use the @code{taskset}
+command-line utility.
+
+A newly spawned fiber will be scheduled on the kernel thread in which
+it was created, unless @code{#:parallel? #t} was passed to the
+@code{spawn-fiber} invocation, in which case its initial kernel thread
+will be selected at random.  In this way the default is to preserve
+locality of memory access and minimize cross-thread coordination.
+
+Additionally, after a scheduler has exhausted its run queue for the
+current turn, if it has nothing scheduled for the next turn it will
+try to steal work from other schedulers.  This @dfn{work stealing}
+allows a set of parallel schedulers to automatically rebalance and
+burn through the current global run queue as fast as possible.
+
+After processing its current run queue, possibly including stolen work
+if its next run queue was empty, a scheduler will then ask the
+operating system for any file descriptors that have pending activity.
+The scheduler puts a time limit on this sleep phase if there are
+pending timeouts, but otherwise the sleep will only wake up when a
+file descriptor becomes readable or writable, or if another thread
+wakes up the scheduler.  Schedulers that are sleeping do not
+participate in work stealing.  For this reason there is another source
+of work rebalancing in Fibers, @dfn{work sharing}.  As mentioned
+above, to schedule a fiber on a random remote scheduler, use
+@code{spawn-fiber} with the @code{#:parallel? #t} keyword argument.
+
+The specifics of the scheduling algorithm may change, and it may be
+that there is no global ``best scheduler''.  We look forward to
+experimenting and finding not only a good default algorithm, but also
+a library that you can use to find your own local maximum in the
+scheduling space.
+
 @node Reference
 @chapter API reference
 
-Fibers is a library built on Guile, consisting of a public interface,
-base support for asynchronous operations, implementations of
-operations for channels and timers, and an internals interface.
+Fibers is a library built on Guile.  It consists of a public
+interface, base support for asynchronous operations, implementations
+of operations for channels and timers, and an internals interface.
 
 @menu
 * Using Fibers::        User-facing interface to fibers
@@ -405,7 +450,11 @@ import the @code{(fibers)} module:
 To create a new fibers scheduler and run it in the current Guile
 thread, use @code{run-fibers}.
 
-@defun run-fibers [init-thunk=@code{#f}] [#:install-suspendable-ports?=@code{#t}] [#:scheduler=@code{#f}] [#:hz=0]
+@defun run-fibers [init-thunk=@code{#f}] @
+       [#:install-suspendable-ports?=@code{#t}] @
+       [#:scheduler=@code{#f}] @
+       [#:parallelism=@code{(current-processor-count)}] @
+       [#:hz=100]
 Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
 until the scheduler has no more runnable fibers.  Return the value(s)
 returned by the call to @var{init-thunk}.
@@ -435,17 +484,22 @@ create one), you can pass it to @code{run-fibers} using the
 @code{#:scheduler} keyword argument.  In that case the scheduler will
 not be destroyed when @code{run-fibers} finishes.
 
-By default @var{hz} is 0, indicating that running fibers should never
-be preempted, and should instead run until they need to wait on some
-operation.  That is to say, the default scheduling mode is
-cooperative.  Pass a higher value to cause computationally expensive
-tasks to be preempted if possible.  Note that preemption will only
-occur if the fiber can actually be suspended; @xref{Barriers}, for
-more information.
+If @code{run-fibers} creates a scheduler on your behalf, it will
+arrange for a number of ``peer'' schedulers to also be created, up to
+a total scheduler count controlled by the @var{parallelism} keyword
+argument.  These peer schedulers will be run in separate threads and
+will participate in work rebalancing.  @xref{Parallelism}.
+
+By default @var{hz} is 100, indicating that running fibers should be
+preempted 100 times per every second of CPU time (not wall-clock
+time).  Note that preemption will only occur if the fiber can actually
+be suspended; @xref{Barriers}, for more information.  Pass @code{0}
+for @var{hz} to disable preemption, effectively making scheduling
+fully cooperative.
 @end defun
 
 @defun spawn-fiber thunk [scheduler=@code{(require-current-scheduler)}] @
-       [#:dynamic-state=@code{(current-dynamic-state)}]
+       [#:parallel?=@code{#f}]
 Spawn a new fiber that will run @var{thunk}.  Return the new fiber.
 The new fiber will run concurrently with other fibers.
 
@@ -455,9 +509,10 @@ scheduler, which is useful to ensure that the fiber runs on a
 different kernel thread.  In that case, pass the @code{#:scheduler}
 keyword argument.
 
-Currently, fibers will only ever be run within the scheduler to which
-they are first added, which effectively pins them to a single kernel
-thread.  This limitation may be relaxed in the future.
+If @var{parallel?} is true, the fiber will be started not
+(necessarily) on @var{scheduler}, but on a random member of the peer
+set of @var{scheduler}.  @xref{Parallelism}.  Note that every
+scheduler is a member of its own peer set.
 
 The fiber will inherit the fluid--value associations (the dynamic
 state) in place when @code{spawn-fiber} is called.  Any
@@ -511,7 +566,10 @@ operation cannot complete directly, block until it can complete.
 @end defun
 
 @xref{Introduction}, for more on the ``Concurrent ML'' system that
-introduced the concept of the operation abstraction.
+introduced the concept of the operation abstraction.  In the context
+of Fibers, ``blocking'' means to suspend the current fiber, or to
+suspend the current kernel thread if the operation is performed
+outside of a fiber.
 
 There is also a low-level constructor for other modules that implement
 primitive operation types:
@@ -544,17 +602,17 @@ Return @code{#t} if @var{obj} is a channel, or @code{#f} otherwise.
 
 @defun put-operation channel message
 Make an operation that if and when it completes will rendezvous with a
-receiver fiber to send @var{message} over @var{channel}.
+receiving operation to send @var{message} over @var{channel}.
 @end defun
 
 @defun get-operation channel
 Make an operation that if and when it completes will rendezvous with a
-sender fiber to receive one value from @var{channel}.
+sending operation to receive one value from @var{channel}.
 @end defun
 
 @defun put-message channel message
 Send @var{message} on @var{channel}, and return zero values.  If there
-is already another fiber waiting to receive a message on this channel,
+is already a receiver waiting to receive a message on this channel,
 give it our message and continue.  Otherwise, block until a receiver
 becomes available.
 
@@ -565,8 +623,8 @@ Equivalent to:
 @end defun
 
 @defun get-message channel
-Receive a message from @var{channel} and return it.  If there is already
-another fiber waiting to send a message on this channel, take its
+Receive a message from @var{channel} and return it.  If there is
+already a receiver waiting to send a message on this channel, take its
 message directly.  Otherwise, block until a sender becomes available.
 
 Equivalent to:
@@ -600,7 +658,8 @@ operation will succeed with no values.
 @end defun
 
 @defun sleep seconds
-Block the calling fiber until @var{seconds} have elapsed.
+Block the calling fiber or kernel thread until @var{seconds} have
+elapsed.
 @end defun
 
 @node REPL Commands
@@ -653,26 +712,40 @@ point, but for now this section is a stub.
 (use-modules (fibers internal))
 @end example
 
-@defun make-scheduler
-Make a new scheduler in which to run fibers.  @var{hz} indicates the
-frequency at which fibers should be preempted.  
+@defun make-scheduler [#:parallelism=@code{#f}] @
+       [#:prompt-tag=@code{(make-prompt-tag "fibers")}]
+
+Make a new scheduler in which to run fibers.  If @var{parallelism} is
+true, it should be an integer indicating the number of schedulers to
+make.  The resulting schedulers will all share the same prompt tag and
+will steal and share out work from among themselves.
 @end defun
 
 @defspec with-scheduler scheduler body ...
 Evaluate @code{(begin @var{body} ...)} in an environment in which
-@var{scheduler} is bound to the current kernel thread and marked as
-current.  Signal an error if @var{scheduler} is already running in some
-other kernel thread.
+@var{scheduler} is bound to the current kernel thread.  Signal an
+error if @var{scheduler} is already running in some other kernel
+thread.
 @end defspec
 
 @defun scheduler-name sched
 Return the name of @var{sched}.
 @end defun
 
-@defun run-scheduler sched
+@defun scheduler-kernel-thread sched
+Return the kernel thread that @var{sched} is running on, or @code{#f}
+if it is not currently running.
+@end defun
+
+@defun scheduler-remote-peers sched
+Return a vector of peer schedulers of @var{sched}, not including
+@var{sched} itself.
+@end defun
+
+@defun run-scheduler sched finished?
 Run @var{sched} until there are no more fibers ready to run, no file
-descriptors being waited on, and no more timers pending to run.  Return
-zero values.
+descriptors being waited on, and no more timers pending to run, and
+calling the @var{finished?} thunk returns true.  Return zero values.
 @end defun
 
 @defun destroy-scheduler sched
@@ -689,18 +762,16 @@ Arrange to resume @var{fiber} when the file descriptor @var{fd} becomes
 writable.
 @end defun
 
-@defun resume-on-timer fiber expiry get-thunk
-Arrange to resume @var{fiber} when the absolute real time is greater
-than or equal to @var{expiry}, expressed in internal time units.  The
-fiber will be resumed with the result of calling @var{get-thunk}.  If
-@var{get-thunk} returns @code{#f}, that indicates that some other
-operation performed this operation first, and so no resume is
-performed.
+@defun add-timer sched expiry thunk
+Arrange to call @var{thunk} when the absolute real time is greater
+than or equal to @var{expiry}, expressed in internal time units.
 @end defun
 
 @defun create-fiber sched thunk
-Spawn a new fiber in @var{sched} with the continuation @var{thunk}.  The
-fiber will be scheduled on the next turn.
+Spawn a new fiber in @var{sched} with the continuation @var{thunk}.
+The fiber will be scheduled on the next turn.  @var{thunk} will run
+with a copy of the current dynamic state, isolating fluid and
+parameter mutations to the fiber.
 @end defun
 
 @defvar current-fiber
@@ -713,12 +784,14 @@ this is currently unimplemented!
 @end defun
 
 @defun fiber-scheduler fiber
-Return the scheduler of @var{fiber}.
+Return the scheduler of @var{fiber}.  Note that if the fiber is on a
+run queue, this may change out from under you due to work stealing.
 @end defun
 
 @defun fiber-continuation
 Return the continuation of @var{fiber}, or @code{#f} if @var{fiber} is
-not suspended.
+not suspended.  Again, if @var{fiber} is on a run queue or could be
+resumed by a parallel scheduler, this continuation may change.
 @end defun
 
 @defun fold-all-schedulers f seed
@@ -753,13 +826,12 @@ resumed when it is suspended.  This function is thread-safe even if
 @var{fiber} is running on a remote scheduler.
 @end defun
 
-@defun current-scheduler
-Return the current scheduler, or @code{#f} if no scheduler is current.
-@end defun
-
-@defun scheduler-kernel-thread sched
-Return the kernel thread on which @var{sched} is running, or @code{#f}
-if @var{sched} is not running.
+@defun yield-current-fiber
+Yield control to the current scheduler.  Like
+@code{suspend-current-fiber} followed directly by @code{resume-fiber},
+except that it avoids suspending if the current continuation isn't
+suspendable.  Returns @code{#t} if the yield succeeded, or @code{#f}
+otherwise.
 @end defun
 
 @node Pitfalls
@@ -920,14 +992,15 @@ Although code run within fibers looks like normal straight-up Scheme,
 it runs concurrently with other fibers.  This means that if you mutate
 shared state and other fibers mutate the same shared state using
 normal Scheme procedures like @code{set!}, @code{vector-set!}, or the
-like, then probably you're going to have a bad time.  Even with the
-default cooperative scheduling mode, multi-step transactions may be
+like, then probably you're going to have a bad time.  This is
+especially the case considering that the default is to run as many
+schedulers in parallel as your machine has cores, and also to preempt
+fibers at any time.
+
+Even if you explicitly choose a cooperative scheduling mode by
+disabling interrupts and parallelism, multi-step transactions may be
 suspended if your code reaches a yield point in the middle of
 performing the transaction.
-
-Of course if you enable preemption or have multiple kernel threads
-running fiber schedulers and you still use unstructured mutation, then
-it could indeed be that you have many more possible system states.
 
 The best way around this problem is to avoid unstructured mutation,
 and to instead share data by communicating over channels.  Using
@@ -968,7 +1041,9 @@ The root of this problem is that Guile associates mutexes with kernel
 threads, not fibers.  It would be possible however to make a
 Fibers-appropriate implementation of mutexes, but we suggest that
 users try atomic boxes or channels instead.  If you do use mutexes,
-take care to never suspend a fiber while it owns any mutex.
+make sure you disable preemption (possibly by a local call to
+@code{call-with-blocked-asyncs}), and take care to never suspend a
+fiber while it owns any mutex.
 
 @node Examples
 @chapter Examples
@@ -1166,7 +1241,58 @@ implementation shipped with Guile, though it is not as
 battle-hardened.  @xref{Barriers}, as well, for things that need
 improving on the Guile side of things.
 
+The fibers web server backend is an interesting case because it uses
+channels to invert the inversion-of-control imposed on the backend by
+the web server framework.  The web server wants the backend to provide
+``read-request'' and ``write-response'' callbacks, whereas in fibers
+we usually want to run dedicated REPL-like fibers over the client
+sockets.  The fibers backend enables this by passing a callback to the
+per-client loops:
 
+@example
+(define (have-request response-channel request body)
+  (put-message request-channel
+               (vector response-channel request body))
+  (match (get-message response-channel)
+    (#(response body)
+     (values response body))))
+(let loop ()
+  (match (accept socket)
+    ((client . sockaddr)
+     ;; ...
+     (spawn-fiber (lambda () (client-loop client have-request))
+                  #:parallel? #t)
+     (loop))))
+@end example
+
+From the perspective of the @code{client-loop} fiber,
+@code{have-request} is a normal function that takes a request and
+returns a response, and the @code{client-loop} fiber is in control.
+But from the perspective of the web server, the @code{server-read} and
+@code{server-write} callbacks are straightforward and idiomatic too:
+
+@example
+(define (server-read server)
+  (match (get-message (server-request-channel server))
+    (#(response-channel request body)
+     (let ((client response-channel))
+       (values client request body)))))
+
+(define (server-write server client response body)
+  (let ((response-channel client))
+    (put-message response-channel (vector response body)))
+  (values))
+@end example
+
+This takes advantage of the fact that we can use @code{get-message},
+@code{put-message}, and other CML operations both inside and outside
+of fibers, and it mostly just does the right thing.
+
+Note also the @code{#:parallel? #t} on the @code{spawn-fiber}
+invocation.  The natural unit of parallelism in a web server is the
+request (or the client), so it's at this point that we introduce work
+sharing to our system, allowing us to naturally take advantage of
+multiple cores on our server.
 
 @node Status
 @chapter Project status
