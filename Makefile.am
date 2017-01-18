@@ -53,7 +53,8 @@ TESTS = \
 	tests/channels.scm \
 	tests/foreign.scm \
 	tests/parameters.scm \
-	tests/preemption.scm
+	tests/preemption.scm \
+	tests/speedup.scm
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
