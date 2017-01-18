@@ -63,27 +63,20 @@
          (run-scheduler scheduler finished?)))))))
 
 (define (start-auxiliary-threads scheduler hz finished? affinities)
-  (let ((scheds (scheduler-remote-peers scheduler)))
-    (let lp ((i 0) (affinities affinities))
-      (when (< i (vector-length scheds))
-        (match affinities
-          ((affinity . affinities)
-           (let ((remote (vector-ref scheds i)))
-             (call-with-new-thread
-              (lambda ()
-                (%run-fibers remote hz finished? affinity)))
-             (lp (1+ i) affinities))))))))
+  (for-each (lambda (sched affinity)
+              (call-with-new-thread
+               (lambda ()
+                 (%run-fibers sched hz finished? affinity))))
+            (scheduler-remote-peers scheduler) affinities))
 
 (define (stop-auxiliary-threads scheduler)
-  (let ((scheds (scheduler-remote-peers scheduler)))
-    (let lp ((i 0))
-      (when (< i (vector-length scheds))
-        (let* ((remote (vector-ref scheds i))
-               (thread (scheduler-kernel-thread remote)))
-          (when thread
-            (cancel-thread thread)
-            (join-thread thread))
-          (lp (1+ i)))))))
+  (for-each
+   (lambda (scheduler)
+     (let ((thread (scheduler-kernel-thread scheduler)))
+       (when thread
+         (cancel-thread thread)
+         (join-thread thread))))
+   (scheduler-remote-peers scheduler)))
 
 (define (compute-affinities group-affinity parallelism)
   (define (each-thread-has-group-affinity)
@@ -136,29 +129,23 @@
       (apply values (atomic-box-ref ret))))))
 
 (define* (spawn-fiber thunk #:optional sched #:key parallel?)
-  (define (choose-sched sched)
-    (let* ((remote (scheduler-remote-peers sched))
-           (count (vector-length remote))
-           (idx (random (1+ count))))
-      (if (= count idx)
-          sched
-          (vector-ref remote idx))))
-  (define (spawn sched thunk)
-    (create-fiber (if parallel? (choose-sched sched) sched)
-                  thunk))
   (cond
    (sched
     ;; When a scheduler is passed explicitly, it could be there is no
     ;; current fiber; in that case the dynamic state probably doesn't
     ;; have the right right current-read-waiter /
     ;; current-write-waiter, so wrap the thunk.
-    (spawn sched
-           (lambda ()
-             (current-read-waiter wait-for-readable)
-             (current-write-waiter wait-for-writable)
-             (thunk))))
+    (create-fiber sched
+                  (lambda ()
+                    (current-read-waiter wait-for-readable)
+                    (current-write-waiter wait-for-writable)
+                    (thunk))))
    ((current-fiber)
     => (lambda (fiber)
-         (spawn (fiber-scheduler fiber) thunk)))
+         (let ((sched (fiber-scheduler fiber)))
+           (create-fiber (if parallel?
+                             (choose-parallel-scheduler sched)
+                             sched)
+                         thunk))))
    (else
     (error "No scheduler current; call within run-fibers instead"))))

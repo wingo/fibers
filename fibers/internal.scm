@@ -34,6 +34,7 @@
             scheduler-name
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
             scheduler-remote-peers
+            choose-parallel-scheduler
             run-scheduler
             destroy-scheduler
 
@@ -80,7 +81,8 @@ name is known."
 (define-record-type <scheduler>
   (%make-scheduler name epfd active-fd-count prompt-tag
                    next-runqueue current-runqueue
-                   sources timers kernel-thread remote-peers)
+                   sources timers kernel-thread
+                   remote-peers choose-parallel-scheduler)
   scheduler?
   (name scheduler-name set-scheduler-name!)
   (epfd scheduler-epfd)
@@ -96,8 +98,11 @@ name is known."
   (timers scheduler-timers set-scheduler-timers!)
   ;; atomic parameter of thread
   (kernel-thread scheduler-kernel-thread)
-  ;; vector of sched
-  (remote-peers scheduler-remote-peers set-scheduler-remote-peers!))
+  ;; list of sched
+  (remote-peers scheduler-remote-peers set-scheduler-remote-peers!)
+  ;; () -> sched
+  (choose-parallel-scheduler scheduler-choose-parallel-scheduler
+                             set-scheduler-choose-parallel-scheduler!))
 
 (define-record-type <fiber>
   (make-fiber scheduler continuation)
@@ -119,6 +124,22 @@ name is known."
              (unless (eq? prev init)
                (error "owned by other thread" prev))))))))
 
+(define (shuffle l)
+  (map cdr (sort (map (lambda (x) (cons (random 1.0) x)) l)
+                 (lambda (a b) (< (car a) (car b))))))
+
+(define (make-selector items)
+  (let ((items (list->vector (shuffle items))))
+    (match (vector-length items)
+      (0 (lambda () #f))
+      (1 (let ((item (vector-ref items 0))) (lambda () item)))
+      (n (let ((idx 0))
+           (lambda ()
+             (let ((item (vector-ref items idx)))
+               (set! idx (let ((idx (1+ idx)))
+                           (if (= idx (vector-length items)) 0 idx)))
+               item)))))))
+
 (define* (make-scheduler #:key parallelism
                          (prompt-tag (make-prompt-tag "fibers")))
   "Make a new scheduler in which to run fibers."
@@ -130,24 +151,25 @@ name is known."
         (timers (make-psq (match-lambda*
                             (((t1 . c1) (t2 . c2)) (< t1 t2)))
                           <))
-        (kernel-thread (make-atomic-parameter #f))
-        (remote-peers (if parallelism
-                          (list->vector
-                           (map (lambda (_)
-                                  (make-scheduler #:prompt-tag prompt-tag))
-                                (iota (1- parallelism))))
-                          #())))
+        (kernel-thread (make-atomic-parameter #f)))
     (let ((sched (%make-scheduler #f epfd active-fd-count prompt-tag
                                   next-runqueue current-runqueue
                                   sources timers kernel-thread
-                                  remote-peers)))
+                                  #f #f)))
       (set-scheduler-name! sched (nameset-add! schedulers-nameset sched))
-      (let lp ((i 0))
-        (when (< i (vector-length remote-peers))
-          (let ((peers (vector-copy remote-peers)))
-            (vector-set! peers i sched)
-            (set-scheduler-remote-peers! (vector-ref remote-peers i) peers))
-          (lp (1+ i))))
+      (let ((all-scheds
+             (cons sched
+                   (if parallelism
+                       (map (lambda (_)
+                              (make-scheduler #:prompt-tag prompt-tag))
+                            (iota (1- parallelism)))
+                       '()))))
+        (for-each
+         (lambda (sched)
+           (let ((choose! (make-selector all-scheds)))
+             (set-scheduler-remote-peers! sched (delq sched all-scheds))
+             (set-scheduler-choose-parallel-scheduler! sched choose!)))
+         all-scheds))
       sched)))
 
 (define-syntax-rule (with-scheduler scheduler body ...)
@@ -167,6 +189,9 @@ thread."
   "Return the kernel thread on which @var{sched} is running, or
 @code{#f} if @var{sched} is not running."
   ((scheduler-kernel-thread sched)))
+
+(define (choose-parallel-scheduler sched)
+  ((scheduler-choose-parallel-scheduler sched)))
 
 (define (make-source events expiry fiber) (vector events expiry fiber))
 (define (source-events s) (vector-ref s 0))
@@ -275,6 +300,16 @@ thread."
                     seed))
   (run-timers sched))
 
+(define (fiber-stealer sched)
+  "Steal some work from a random scheduler in the vector
+@var{schedulers}.  Return a fiber, or @code{#f} if no work could be
+stolen."
+  (let ((selector (make-selector (scheduler-remote-peers sched))))
+    (lambda ()
+      (let ((peer (selector)))
+        (and peer
+             (stack-pop! (scheduler-current-runqueue peer) #f))))))
+
 (define* (run-scheduler sched finished?)
   "Run @var{sched} until there are no more fibers ready to run, no
 file descriptors being waited on, and no more timers pending to run.
@@ -282,7 +317,7 @@ Return zero values."
   (let ((tag (scheduler-prompt-tag sched))
         (next (scheduler-next-runqueue sched))
         (cur (scheduler-current-runqueue sched))
-        (peers (scheduler-remote-peers sched)))
+        (steal-fiber! (fiber-stealer sched)))
     (define (run-fiber fiber)
       (call-with-prompt tag
         (lambda ()
@@ -304,7 +339,7 @@ Return zero values."
              ;; little bit of work from a remote scheduler if we
              ;; can.  Run it directly instead of pushing onto a
              ;; queue to avoid double stealing.
-             (match (steal-fiber! peers)
+             (match (steal-fiber!)
                (#f
                 (unless (scheduler-finished? sched finished?)
                   (next-turn)))
@@ -317,15 +352,6 @@ Return zero values."
           (fiber
            (run-fiber fiber)
            (next-fiber)))))))
-
-(define (steal-fiber! schedulers)
-  "Steal some work from a random scheduler in the vector
-@var{schedulers}.  Return a fiber, or @code{#f} if no work could be
-stolen."
-  (let ((len (vector-length schedulers)))
-    (and (> len 0)
-         (let ((sched (vector-ref schedulers (random len))))
-           (stack-pop! (scheduler-current-runqueue sched) #f)))))
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."
