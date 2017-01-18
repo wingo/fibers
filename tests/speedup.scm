@@ -46,10 +46,14 @@
           (format #t " / ~a s = ~ax (~a cpus)\n" t2 (/ t1 t2)
                   (current-processor-count)))))))
 
+(define (loop-to n) (let lp ((i 0)) (when (< i n) (lp (1+ i)))))
 (measure-speedup
  (do-times 100000 (spawn-fiber (lambda () #t) #:parallel? #t)))
-(define (loop-to-1e4) (let lp ((i 0)) (when (< i #e1e4) (lp (1+ i)))))
-(measure-speedup
- (do-times 100000 (spawn-fiber loop-to-1e4 #:parallel? #t)))
 (measure-speedup
  (do-times 40000 (spawn-fiber (lambda () (sleep 1)) #:parallel? #t)))
+(measure-speedup
+ (do-times 100000 (spawn-fiber (lambda () (loop-to #e1e4)) #:parallel? #t)))
+(measure-speedup
+ (do-times 10000 (spawn-fiber (lambda () (loop-to #e1e5)) #:parallel? #t)))
+(measure-speedup
+ (do-times 1000 (spawn-fiber (lambda () (loop-to #e1e6)) #:parallel? #t)))
