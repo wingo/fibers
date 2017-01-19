@@ -27,6 +27,7 @@ info_TEXINFOS=fibers.texi
 SOURCES = \
 	fibers.scm \
 	fibers/channels.scm \
+	fibers/config.scm \
 	fibers/deque.scm \
 	fibers/epoll.scm \
 	fibers/internal.scm \
@@ -48,6 +49,12 @@ epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 epoll_la_LIBADD = $(GUILE_LIBS)
 epoll_la_LDFLAGS = -export-dynamic -module
 
+fibers/config.scm: Makefile fibers/config.scm.in
+	sed -e "s|@extlibdir\@|$(extlibdir)|" \
+	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
+
+CLEANFILES += fibers/config.scm
+
 TESTS = \
 	tests/basic.scm \
 	tests/channels.scm \
@@ -59,6 +66,7 @@ TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
 	env.in \
+	fibers/config.scm.in \
 	HACKING \
         COPYING.LESSER \
 	README.md \

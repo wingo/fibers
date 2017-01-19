@@ -25,6 +25,7 @@
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-9 gnu)
   #:use-module (rnrs bytevectors)
+  #:use-module (fibers config)
   #:export (epoll-create
             epoll-destroy
             epoll?
@@ -37,7 +38,8 @@
             EPOLLIN EPOLLOUT EPOLLPRO EPOLLERR EPOLLHUP EPOLLET))
 
 (eval-when (eval load compile)
-  (load-extension "epoll" "init_fibers_epoll"))
+  (dynamic-call "init_fibers_epoll"
+                (dynamic-link (extension-library "epoll"))))
 
 (when (defined? 'EPOLLRDHUP)
   (export EPOLLRDHUP))
