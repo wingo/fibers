@@ -454,6 +454,7 @@ thread, use @code{run-fibers}.
        [#:install-suspendable-ports?=@code{#t}] @
        [#:scheduler=@code{#f}] @
        [#:parallelism=@code{(current-processor-count)}] @
+       [#:cpus=@code{(getaffinity 0)}] @
        [#:hz=100]
 Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
 until the scheduler has no more runnable fibers.  Return the value(s)
@@ -488,7 +489,8 @@ If @code{run-fibers} creates a scheduler on your behalf, it will
 arrange for a number of ``peer'' schedulers to also be created, up to
 a total scheduler count controlled by the @var{parallelism} keyword
 argument.  These peer schedulers will be run in separate threads and
-will participate in work rebalancing.  @xref{Parallelism}.
+will participate in work rebalancing.  The fibers will be run on the
+CPUs specified by @var{cpus}.  @xref{Parallelism}.
 
 By default @var{hz} is 100, indicating that running fibers should be
 preempted 100 times per every second of CPU time (not wall-clock
@@ -738,8 +740,13 @@ if it is not currently running.
 @end defun
 
 @defun scheduler-remote-peers sched
-Return a vector of peer schedulers of @var{sched}, not including
+Return a list of peer schedulers of @var{sched}, not including
 @var{sched} itself.
+@end defun
+
+@defun choose-parallel-scheduler sched
+Return a random scheduler from @var{sched}'s peer set.  Note that
+@var{sched}'s peer set includes @var{sched} itself.
 @end defun
 
 @defun run-scheduler sched finished?
