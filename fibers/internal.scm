@@ -367,10 +367,23 @@ parameter mutations to the fiber."
   (let* ((fiber (make-fiber sched #f))
          (thunk (let ((dynamic-state (current-dynamic-state)))
                   (lambda ()
-                    (with-dynamic-state dynamic-state
-                                        (lambda ()
-                                          (current-fiber fiber)
-                                          (thunk)))))))
+                    (with-dynamic-state
+                     dynamic-state
+                     (lambda ()
+                       (current-fiber fiber)
+                       (catch #t
+                         (lambda ()
+                           (%start-stack #t thunk))
+                         (lambda _ #f)
+                         (let ((err (current-error-port)))
+                           (lambda (key . args)
+                             (false-if-exception
+                              (let ((stack (make-stack #t 4)))
+                                (format err "Uncaught exception in fiber #~a:\n"
+                                        (nameset-ref fibers-nameset fiber))
+                                (display-backtrace stack err)
+                                (print-exception err (stack-ref stack 0)
+                                                 key args))))))))))))
     (nameset-add! fibers-nameset fiber)
     (schedule-fiber! fiber thunk)))
 
