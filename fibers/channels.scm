@@ -69,7 +69,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
                ;; Try to update getq.  Return the new getq value in
                ;; any case.
                (let ((q (atomic-box-compare-and-swap! getq-box getq getq*)))
-                 (if (eq? q getq) getq* getq)))
+                 (if (eq? q getq) getq* q)))
              ;; Return #f if the getq was empty.
              (and getq*
                   (match item
@@ -124,7 +124,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
                ;; Try to update getq.  Return the new getq value in
                ;; any case.
                (let ((q (atomic-box-compare-and-swap! getq-box getq getq*)))
-                 (if (eq? q getq) getq* getq)))
+                 (if (eq? q getq) getq* q)))
              ;; We only have to service the getq if it is non-empty.
              (when getq*
                (match item
@@ -186,7 +186,7 @@ with a sender fiber to receive one value from @var{channel}."
                ;; Try to update putq.  Return the new putq value in
                ;; any case.
                (let ((q (atomic-box-compare-and-swap! putq-box putq putq*)))
-                 (if (eq? q putq) putq* putq)))
+                 (if (eq? q putq) putq* q)))
              ;; Return #f if the putq was empty.
              (and putq*
                   (match item
@@ -239,7 +239,7 @@ with a sender fiber to receive one value from @var{channel}."
                ;; Try to update putq.  Return the new putq value in
                ;; any case.
                (let ((q (atomic-box-compare-and-swap! putq-box putq putq*)))
-                 (if (eq? q putq) putq* putq)))
+                 (if (eq? q putq) putq* q)))
              ;; We only have to service the putq if it is non-empty.
              (when putq*
                (match item
