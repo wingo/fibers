@@ -111,6 +111,25 @@ scm_primitive_epoll_ctl (SCM epfd, SCM op, SCM fd, SCM events)
 }
 #undef FUNC_NAME
 
+struct epoll_wait_data {
+  int fd;
+  struct epoll_event *events;
+  int maxevents;
+  int timeout;
+  int rv;
+  int err;
+};
+
+static void*
+do_epoll_wait (void *p)
+{
+  struct epoll_wait_data *data = p;
+  data->rv = epoll_wait (data->fd, data->events, data->maxevents,
+                         data->timeout);
+  data->err = errno;
+  return NULL;
+}
+
 /* Wait on the files whose descriptors were registered on EPFD, and
    write the resulting events in EVENTSV, a bytevector.  Returns the
    number of struct epoll_event values that were written to EVENTSV,
@@ -140,18 +159,19 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
     rv = 0;
   else
     {
-      int err;
-      rv = epoll_wait (c_epfd, events, maxevents, c_timeout);
-      if (rv < 0)
-        err = errno;
+      struct epoll_wait_data data = { c_epfd, events, maxevents, c_timeout };
+      scm_without_guile (do_epoll_wait, &data);
+      rv = data.rv;
       scm_c_wait_finished ();
       if (rv < 0)
         {
-          errno = err;
-          if (err == EINTR)
+          if (data.err == EINTR)
             rv = 0;
           else
-            SCM_SYSERROR;
+            {
+              errno = data.err;
+              SCM_SYSERROR;
+            }
         }
       else
         {
