@@ -1092,9 +1092,10 @@ fiber while it owns any mutex.
 Here are some small examples to get you started.
 
 @menu
-* Ping::                An echo server and client.
-* Memcached::           A simple memcached server and client.
-* Web Server::          Guile's non-blocking web server.
+* Ping::                  An echo server and client.
+* Memcached::             A simple memcached server and client.
+* Web Server Backend::    A backend for Guile's web server.
+* Concurrent Web Server:: A more concurrent web server.
 @end menu
 
 More examples would be great, especially demonstrating interesting
@@ -1260,12 +1261,18 @@ sys	0m1.456s
 Here we see a throughput of around 12000 puts plus 12000 gets per
 second; pretty good for a basic implementation.
 
-@node Web Server
-@section Web Server
+@node Web Server Backend
+@section Web Server Backend
 
 Fibers includes a ``backend'' for Guile's built-in web server that
-uses fibers.  To run a web server that serves each client from fibers,
-specify the @code{fibers} backend when running your web server:
+uses non-blocking fibers to read requests and write responses.  Fibers
+also includes a standalone web server that uses Guile's HTTP
+facilities, but not its web server framework.  @xref{Concurrent Web
+Server}, for more on the standalone web server.
+
+To run a web server that serves each client from
+fibers, specify the @code{fibers} backend when running your web
+server:
 
 @example
 (use-modules (web server))
@@ -1334,6 +1341,37 @@ invocation.  The natural unit of parallelism in a web server is the
 request (or the client), so it's at this point that we introduce work
 sharing to our system, allowing us to naturally take advantage of
 multiple cores on our server.
+
+@node Concurrent Web Server
+@section Concurrent Web Server
+
+Guile's web server framework single-threads all web request handling.
+The handler procedure can be passed a number of additional ``state''
+arguments, and is expected to return a corresponding number of
+additional values to use as the next state.  This is sometimes what
+you want, but it does limit concurrency; instead it would be nice to
+be able to not only the input and output running concurrently, but
+also handlers too.
+
+For this reason, Fibers includes a simple standalone web server that
+uses Guile's Guile's HTTP facilities, but not its web server
+framework.  To run a standalone web server, use the @code{(fibers web
+server)} module:
+
+@example
+(use-modules (fibers web server))
+
+(define (handler request body)
+  (values '((content-type . (text/plain)))
+          "Hello, World!"))
+
+(run-server handler)
+@end example
+
+Compared to the Fibers web server backend (@pxref{Web Server
+Backend}), using the standalone fibers web server enables more
+parallelism, as the handlers can run in parallel when you have
+multiple cores.
 
 @node Status
 @chapter Project status

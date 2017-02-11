@@ -40,6 +40,7 @@ SOURCES = \
 	fibers/stack.scm \
 	fibers/repl.scm \
 	fibers/timers.scm \
+	fibers/web/server.scm \
 	web/server/fibers.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
