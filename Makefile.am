@@ -27,6 +27,7 @@ info_TEXINFOS=fibers.texi
 SOURCES = \
 	fibers.scm \
 	fibers/channels.scm \
+	fibers/conditions.scm \
 	fibers/config.scm \
 	fibers/deque.scm \
 	fibers/epoll.scm \
@@ -57,6 +58,7 @@ CLEANFILES += fibers/config.scm
 
 TESTS = \
 	tests/basic.scm \
+	tests/conditions.scm \
 	tests/channels.scm \
 	tests/foreign.scm \
 	tests/parameters.scm \

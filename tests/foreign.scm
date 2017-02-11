@@ -64,7 +64,7 @@
 (assert-equal #f #f)
 (assert-terminates #t)
 (assert-terminates (sleep 1))
-(assert-terminates (perform-operation (wait-operation 1)))
+(assert-terminates (perform-operation (sleep-operation 1)))
 (assert-equal 42 (receive-from-fiber 42))
 (assert-equal 42 (send-to-fiber 42))
 

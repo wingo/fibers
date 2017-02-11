@@ -433,6 +433,7 @@ of operations for channels and timers, and an internals interface.
 * Operations::          Composable abstractions for concurrency.
 * Channels::            Share memory by communicating.
 * Timers::              Operations on time.
+* Conditions::          Waiting for simple state changes.
 * REPL Commands::       Experimenting with Fibers at the console.
 * Internals::           Scheduler and fiber objects and operations.
 @end menu
@@ -641,14 +642,14 @@ between fibers on different kernel threads.
 @node Timers
 @section Timers
 
-Timers are a kind of operation that, you guessed it, let you wait
+Timers are a kind of operation that, you guessed it, let you sleep
 until a certain time.
 
 @example
 (use-modules (fibers timers))
 @end example
 
-@defun wait-operation seconds
+@defun sleep-operation seconds
 Make an operation that will succeed with no values when @var{seconds}
 have elapsed.
 @end defun
@@ -662,6 +663,39 @@ operation will succeed with no values.
 @defun sleep seconds
 Block the calling fiber or kernel thread until @var{seconds} have
 elapsed.
+@end defun
+
+@node Conditions
+@section Conditions
+
+Condition variables are a simple one-bit form of concurrent
+communication.  A condition variable has two states: it starts in the
+@dfn{unsignalled} state and later may transition to the
+@dfn{signalled} state.  When a condition becomes signalled, any
+associated waiting operations complete.
+
+@example
+(use-modules (fibers contitions))
+@end example
+
+@defun make-condition
+Make a new condition variable.
+@end defun
+
+@defun condition? obj
+Return @code{#t} if @var{obj} is a condition variable, or @code{#f}
+otherwise.
+@end defun
+
+@defun wait-operation cvar
+Make an operation that will succeed with no values when @var{cvar}
+becomes signalled.
+@end defun
+
+@defun wait cvar
+Block the calling fiber or kernel thread until @var{cvar} becomes
+signalled.  Equivalent to @code{(perform-operation (wait-operation
+cvar))}.
 @end defun
 
 @node REPL Commands

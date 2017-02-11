@@ -23,7 +23,7 @@
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
   #:use-module (ice-9 threads)
-  #:export (wait-operation
+  #:export (sleep-operation
             timer-operation)
   #:replace (sleep))
 
@@ -63,7 +63,7 @@ units.  The operation will succeed with no values."
                                              (perform-operation (timer-operation expiry))
                                              (timer)))))))
 
-(define (wait-operation seconds)
+(define (sleep-operation seconds)
   "Make an operation that will succeed with no values when
 @var{seconds} have elapsed."
   (timer-operation
@@ -73,4 +73,4 @@ units.  The operation will succeed with no values."
 
 (define (sleep seconds)
   "Block the calling fiber until @var{seconds} have elapsed."
-  (perform-operation (wait-operation seconds)))
+  (perform-operation (sleep-operation seconds)))
