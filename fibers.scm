@@ -114,7 +114,10 @@
         (error "run-fibers requires initial fiber thunk when creating sched"))
       (spawn-fiber (lambda ()
                      (call-with-values init
-                       (lambda vals (atomic-box-set! ret vals))))
+                       (lambda vals (atomic-box-set! ret vals)))
+                     ;; Could be that this fiber was migrated away.
+                     ;; Make sure to wake up the main scheduler.
+                     (spawn-fiber (lambda () #t) scheduler))
                    scheduler)
       (match affinities
         ((affinity . affinities)
