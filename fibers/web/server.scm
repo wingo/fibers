@@ -181,7 +181,9 @@ on the procedure being called at any particular time."
     (lambda ()
       (let loop ()
         (cond
-         ((eof-object? (lookahead-u8 client))
+         ((catch #t
+            (lambda () (eof-object? (lookahead-u8 client)))
+            (lambda _ #t))
           (close-port client))
          (else
           (call-with-values
@@ -203,8 +205,7 @@ on the procedure being called at any particular time."
                   (when body
                     (put-bytevector client body))
                   (force-output client)
-                  (if (and (keep-alive? response)
-                           (not (eof-object? (lookahead-u8 client))))
+                  (if (keep-alive? response)
                       (loop)
                       (close-port client))))))))))
     (lambda (k . args)
