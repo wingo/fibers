@@ -64,7 +64,8 @@
                   (spawn-fiber
                    (lambda ()
                      (client-loop addrinfo n num-connections)
-                     (put-message ch 'done)))
+                     (put-message ch 'done))
+                   #:parallel? #t)
                   ch))
               (iota num-clients)))))
 
