@@ -238,7 +238,7 @@ thread."
                    (resume-fiber (source-fiber source) (lambda () revents))))
                (cdr sources))
      (cond
-      ((zero? (logand revents EPOLLERR))
+      ((not (zero? (logand revents EPOLLERR)))
        (hashv-remove! (scheduler-sources sched) fd)
        (epoll-remove! (scheduler-epfd sched) fd))
       (else
