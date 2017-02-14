@@ -19,6 +19,7 @@
 
 (use-modules (rnrs bytevectors)
              (fibers)
+             (fibers channels)
              (ice-9 binary-ports)
              (ice-9 textual-ports)
              (ice-9 rdelim)
@@ -57,12 +58,15 @@
   ;; The getaddrinfo call blocks, unfortunately.  Call it once before
   ;; spawning clients.
   (let ((addrinfo (car (getaddrinfo "localhost" (number->string 11211)))))
-    (let lp ((n 0))
-      (when (< n num-clients)
-        (spawn-fiber
-         (lambda ()
-           (client-loop addrinfo n num-connections)))
-        (lp (1+ n))))))
+    (map get-message
+         (map (lambda (n)
+                (let ((ch (make-channel)))
+                  (spawn-fiber
+                   (lambda ()
+                     (client-loop addrinfo n num-connections)
+                     (put-message ch 'done)))
+                  ch))
+              (iota num-clients)))))
 
 (run-fibers
  (lambda ()
