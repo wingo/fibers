@@ -217,13 +217,14 @@ on the procedure being called at any particular time."
       ((client . sockaddr)
        ;; From "HOP, A Fast Server for the Diffuse Web", Serrano.
        (setsockopt client SOL_SOCKET SO_SNDBUF (* 12 1024))
-       (set-nonblocking! client)
        ;; Always disable Nagle's algorithm, as we handle buffering
        ;; ourselves.  Ignore exceptions if it's not a TCP port, or
        ;; TCP_NODELAY is not defined on this platform.
        (false-if-exception
         (setsockopt client IPPROTO_TCP TCP_NODELAY 0))
-       (spawn-fiber (lambda () (client-loop client handler))
+       (spawn-fiber (lambda ()
+                      (set-nonblocking! client)
+                      (client-loop client handler))
                     #:parallel? #t)
        (loop)))))
 
