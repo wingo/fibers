@@ -31,6 +31,7 @@
             epoll?
             epoll-add!
             epoll-modify!
+            epoll-add*!
             epoll-remove!
             epoll-wake!
             epoll
@@ -111,8 +112,14 @@
 (define (epoll-add! epoll fd events)
   (primitive-epoll-ctl (epoll-fd epoll) EPOLL_CTL_ADD fd events))
 
-(define* (epoll-modify! epoll fd events)
+(define (epoll-modify! epoll fd events)
   (primitive-epoll-ctl (epoll-fd epoll) EPOLL_CTL_MOD fd events))
+
+(define (epoll-add*! epoll fd events)
+  (catch 'system-error
+    (lambda () (epoll-modify! epoll fd events))
+    (lambda _
+      (epoll-add! epoll fd events))))
 
 (define (epoll-remove! epoll fd)
   (primitive-epoll-ctl (epoll-fd epoll) EPOLL_CTL_DEL fd))
