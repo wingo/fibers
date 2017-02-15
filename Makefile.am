@@ -43,6 +43,8 @@ SOURCES = \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
+BUILT_SOURCES = fibers/config.scm
+
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
 extlib_LTLIBRARIES = epoll.la
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
