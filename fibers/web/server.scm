@@ -177,6 +177,10 @@ on the procedure being called at any particular time."
            (else #f)))))
 
 (define (client-loop client handler)
+  ;; Always disable Nagle's algorithm, as we handle buffering
+  ;; ourselves; when we force-output, we really want the data to go
+  ;; out.
+  (setsockopt client IPPROTO_TCP TCP_NODELAY 1)
   (with-throw-handler #t
     (lambda ()
       (let loop ()
@@ -215,13 +219,6 @@ on the procedure being called at any particular time."
   (let loop ()
     (match (accept socket)
       ((client . sockaddr)
-       ;; From "HOP, A Fast Server for the Diffuse Web", Serrano.
-       (setsockopt client SOL_SOCKET SO_SNDBUF (* 12 1024))
-       ;; Always disable Nagle's algorithm, as we handle buffering
-       ;; ourselves.  Ignore exceptions if it's not a TCP port, or
-       ;; TCP_NODELAY is not defined on this platform.
-       (false-if-exception
-        (setsockopt client IPPROTO_TCP TCP_NODELAY 0))
        (spawn-fiber (lambda ()
                       (set-nonblocking! client)
                       (client-loop client handler))
