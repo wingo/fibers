@@ -180,6 +180,7 @@ on the procedure being called at any particular time."
   ;; Always disable Nagle's algorithm, as we handle buffering
   ;; ourselves; when we force-output, we really want the data to go
   ;; out.
+  (setvbuf client 'block 1024)
   (setsockopt client IPPROTO_TCP TCP_NODELAY 1)
   (with-throw-handler #t
     (lambda ()
@@ -217,10 +218,9 @@ on the procedure being called at any particular time."
 
 (define (socket-loop socket handler)
   (let loop ()
-    (match (accept socket)
+    (match (accept socket (logior SOCK_NONBLOCK SOCK_CLOEXEC))
       ((client . sockaddr)
        (spawn-fiber (lambda ()
-                      (set-nonblocking! client)
                       (client-loop client handler))
                     #:parallel? #t)
        (loop)))))
