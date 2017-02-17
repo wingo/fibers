@@ -32,6 +32,7 @@
             make-scheduler
             with-scheduler
             scheduler-name
+            scheduler-runcount
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
             scheduler-remote-peers
             choose-parallel-scheduler
@@ -79,13 +80,15 @@ name is known."
   (nameset-ref fibers-nameset name))
 
 (define-record-type <scheduler>
-  (%make-scheduler name epfd prompt-tag
+  (%make-scheduler name epfd runcount-box prompt-tag
                    next-runqueue current-runqueue
                    sources timers kernel-thread
                    remote-peers choose-parallel-scheduler)
   scheduler?
   (name scheduler-name set-scheduler-name!)
   (epfd scheduler-epfd)
+  ;; atomic variable of uint32
+  (runcount-box scheduler-runcount-box)
   (prompt-tag scheduler-prompt-tag)
   ;; atomic stack of fiber to run next turn (reverse order)
   (next-runqueue scheduler-next-runqueue)
@@ -143,6 +146,7 @@ name is known."
                          (prompt-tag (make-prompt-tag "fibers")))
   "Make a new scheduler in which to run fibers."
   (let ((epfd (epoll-create))
+        (runcount-box (make-atomic-box 0))
         (next-runqueue (make-empty-stack))
         (current-runqueue (make-empty-stack))
         (sources (make-hash-table))
@@ -150,7 +154,7 @@ name is known."
                             (((t1 . c1) (t2 . c2)) (< t1 t2)))
                           <))
         (kernel-thread (make-atomic-parameter #f)))
-    (let ((sched (%make-scheduler #f epfd prompt-tag
+    (let ((sched (%make-scheduler #f epfd runcount-box prompt-tag
                                   next-runqueue current-runqueue
                                   sources timers kernel-thread
                                   #f #f)))
@@ -182,6 +186,11 @@ thread."
                     body ...)
                   (lambda ()
                     ((scheduler-kernel-thread sched) #f)))))
+
+(define (scheduler-runcount sched)
+  "Return the number of fibers that have been scheduled on
+@var{sched} since it was started, modulo 2@sup{32}."
+  (atomic-box-ref (scheduler-runcount-box sched)))
 
 (define (scheduler-kernel-thread/public sched)
   "Return the kernel thread on which @var{sched} is running, or
@@ -301,10 +310,13 @@ stolen."
 file descriptors being waited on, and no more timers pending to run.
 Return zero values."
   (let ((tag (scheduler-prompt-tag sched))
+        (runcount-box (scheduler-runcount-box sched))
         (next (scheduler-next-runqueue sched))
         (cur (scheduler-current-runqueue sched))
         (steal-fiber! (fiber-stealer sched)))
     (define (run-fiber fiber)
+      (atomic-box-set! runcount-box
+                       (logand (1+ (atomic-box-ref runcount-box)) #xffffFFFF))
       (call-with-prompt tag
         (lambda ()
           (let ((thunk (fiber-continuation fiber)))

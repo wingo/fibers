@@ -58,7 +58,13 @@
     (parameterize ((current-read-waiter wait-for-readable)
                    (current-write-waiter wait-for-writable))
       (with-interrupts
-       hz yield-current-fiber
+       hz
+       (let ((last-runcount 0))
+         (lambda ()
+           (let ((runcount (scheduler-runcount scheduler)))
+             (when (eqv? runcount last-runcount)
+               (yield-current-fiber))
+             (set! last-runcount runcount))))
        (lambda ()
          (run-scheduler scheduler finished?)))))))
 
