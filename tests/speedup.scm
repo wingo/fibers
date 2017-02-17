@@ -47,6 +47,12 @@
                   (current-processor-count)))))))
 
 (define (loop-to n) (let lp ((i 0)) (when (< i n) (lp (1+ i)))))
+(define (alloc-to words n)
+  (let lp ((i 0) (x #f))
+    (if (< i n)
+        (lp (1+ i) (make-vector (- words 2) #f))
+        x)))
+
 (measure-speedup
  (do-times 100000 (spawn-fiber (lambda () #t) #:parallel? #t)))
 (measure-speedup
@@ -57,3 +63,10 @@
  (do-times 10000 (spawn-fiber (lambda () (loop-to #e1e5)) #:parallel? #t)))
 (measure-speedup
  (do-times 1000 (spawn-fiber (lambda () (loop-to #e1e6)) #:parallel? #t)))
+
+(measure-speedup
+ (do-times 100000 (spawn-fiber (lambda () (alloc-to 4 #e1e3)) #:parallel? #t)))
+(measure-speedup
+ (do-times 10000 (spawn-fiber (lambda () (alloc-to 4 #e1e4)) #:parallel? #t)))
+(measure-speedup
+ (do-times 1000 (spawn-fiber (lambda () (alloc-to 4 #e1e5)) #:parallel? #t)))
