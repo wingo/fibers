@@ -61,10 +61,11 @@
        hz
        (let ((last-runcount 0))
          (lambda ()
-           (let ((runcount (scheduler-runcount scheduler)))
-             (when (eqv? runcount last-runcount)
-               (yield-current-fiber))
-             (set! last-runcount runcount))))
+           (let* ((runcount (scheduler-runcount scheduler))
+                  (res (eqv? runcount last-runcount)))
+             (set! last-runcount runcount)
+             res)))
+       yield-current-fiber
        (lambda ()
          (run-scheduler scheduler finished?)))))))
 

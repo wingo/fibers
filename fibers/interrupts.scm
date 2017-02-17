@@ -25,9 +25,10 @@
 ;; Cause periodic interrupts via `setitimer' and SIGPROF.  This
 ;; implementation has the disadvantage that it prevents `setitimer'
 ;; from being used for other purposes like profiling.
-(define (with-interrupts/sigprof hz interrupt thunk)
+(define (with-interrupts/sigprof hz pred interrupt thunk)
   (let ((prev #f))
-    (define (sigprof-handler _) (interrupt))
+    (define (sigprof-handler _)
+      (when (pred) (interrupt)))
 
     (define (start-preemption!)
       (let ((period-usecs (inexact->exact (round (/ 1e6 hz)))))
@@ -42,7 +43,7 @@
 
 ;; Cause periodic interrupts via a separate thread sleeping on a clock
 ;; driven by the current thread's CPU time.
-(define (with-interrupts/thread-cputime hz interrupt thunk)
+(define (with-interrupts/thread-cputime hz pred interrupt thunk)
   (let ((interrupt-thread #f)
         (target-thread (current-thread))
         (clockid (pthread-getcpuclockid (pthread-self))))
@@ -59,7 +60,8 @@
              (false-if-exception
               (let lp ()
                 (clock-nanosleep clockid period-nsecs)
-                (system-async-mark interrupt target-thread)
+                (when (pred)
+                  (system-async-mark interrupt target-thread))
                 (lp))))))))
 
     (define (stop-preemption!)
@@ -67,13 +69,13 @@
 
     (dynamic-wind start-preemption! thunk stop-preemption!)))
 
-(define (with-interrupts hz interrupt thunk)
+(define (with-interrupts hz pred interrupt thunk)
   "Run @var{sched} until there are no more fibers ready to run, no
 file descriptors being waited on, and no more timers pending to run.
 Return zero values."
   (cond
    ((zero? hz) (thunk))
    ((provided? 'threads)
-    (with-interrupts/thread-cputime hz interrupt thunk))
+    (with-interrupts/thread-cputime hz pred interrupt thunk))
    (else
-    (with-interrupts/sigprof hz interrupt thunk))))
+    (with-interrupts/sigprof hz pred interrupt thunk))))
