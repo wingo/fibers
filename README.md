@@ -57,7 +57,7 @@ Download: https://wingolog.org/pub/fibers/
 
 ## Build dependencies
 
-Guile 2.1.4 or newer (http://www.gnu.org/software/guile/).
+Guile 2.1.7 or newer (https://www.gnu.org/software/guile/).
 
 
 ## Installation quickstart
