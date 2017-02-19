@@ -4,8 +4,8 @@
 @settitle Fibers
 @c %**end of header
 
-@set VERSION 0.5.0
-@set UPDATED 19 January 2016
+@set VERSION 1.0.0
+@set UPDATED 18 February 2016
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated
@@ -420,6 +420,30 @@ that there is no global ``best scheduler''.  We look forward to
 experimenting and finding not only a good default algorithm, but also
 a library that you can use to find your own local maximum in the
 scheduling space.
+
+As far as performance goes, we have found that computationally
+intensive tasks parallelize rather well.  Expect near-linear speedup
+as you make more cores available to fibers.
+
+On the other hand, although allocation rate improves with additional
+cores, it currently does not scale linearly, and works best when all
+cores are on the same NUMA node.  This is due to details about how
+Guile manages its memory.
+
+In general there may be many bottlenecks that originate in Guile,
+Fibers, and in your application, and these bottlenecks constrain the
+ability of an application to scale linearly.
+
+Probably the best way to know if Fibers scales appropriately for your
+use case is to make some experiments.  To restrict the set of cores
+available to Guile, run Guile from within @code{taskset -c}.  See
+@code{taskset}'s manual page.  For machines with multiple sockets you
+will probably want to use @code{numactl --membind} as well.  Then to
+test scalability on your machine, run @code{./env guile
+tests/speedup.scm} from within your Fibers build directory, or
+benchmark your application directly.  In time we should be able to
+develop some diagnostic facilities to help the Fibers user determine
+where a scaling bottleneck is in their application.
 
 @node Reference
 @chapter API reference
