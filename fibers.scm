@@ -55,19 +55,17 @@
    affinity
    (with-scheduler
     scheduler
-    (parameterize ((current-read-waiter wait-for-readable)
-                   (current-write-waiter wait-for-writable))
-      (with-interrupts
-       hz
-       (let ((last-runcount 0))
-         (lambda ()
-           (let* ((runcount (scheduler-runcount scheduler))
-                  (res (eqv? runcount last-runcount)))
-             (set! last-runcount runcount)
-             res)))
-       yield-current-fiber
+    (with-interrupts
+     hz
+     (let ((last-runcount 0))
        (lambda ()
-         (run-scheduler scheduler finished?)))))))
+         (let* ((runcount (scheduler-runcount scheduler))
+                (res (eqv? runcount last-runcount)))
+           (set! last-runcount runcount)
+           res)))
+     yield-current-fiber
+     (lambda ()
+       (run-scheduler scheduler finished?))))))
 
 (define (start-auxiliary-threads scheduler hz finished? affinities)
   (for-each (lambda (sched affinity)
@@ -105,7 +103,8 @@
                      #:key (hz 100) (scheduler #f)
                      (parallelism (current-processor-count))
                      (cpus (getaffinity 0))
-                     (install-suspendable-ports? #t))
+                     (install-suspendable-ports? #t)
+                     (drain? #f))
   (when install-suspendable-ports? (install-suspendable-ports!))
   (cond
    (scheduler
@@ -115,7 +114,10 @@
    (else
     (let* ((scheduler (make-scheduler #:parallelism parallelism))
            (ret (make-atomic-box #f))
-           (finished? (lambda () (atomic-box-ref ret)))
+           (finished? (lambda ()
+                        (and (atomic-box-ref ret)
+                             (or (not drain?)
+                                 (not (scheduler-work-pending? scheduler))))))
            (affinities (compute-affinities cpus parallelism)))
       (unless init
         (error "run-fibers requires initial fiber thunk when creating sched"))

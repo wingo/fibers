@@ -40,9 +40,10 @@
     (format #t "speedup for ~s: " 'exp)
     (force-output)
     (let ((thunk (lambda () exp)))
-      (let ((t1 (time (lambda () (run-fibers thunk #:parallelism 1)))))
+      (let ((t1 (time (lambda ()
+                        (run-fibers thunk #:parallelism 1 #:drain? #t)))))
         (format #t "~a s" t1)
-        (let ((t2 (time (lambda () (run-fibers thunk)))))
+        (let ((t2 (time (lambda () (run-fibers thunk #:drain? #t)))))
           (format #t " / ~a s = ~ax (~a cpus)\n" t2 (/ t1 t2)
                   (current-processor-count)))))))
 

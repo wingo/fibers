@@ -42,7 +42,7 @@
 
 (define-syntax-rule (assert-run-fibers-terminates exp kw ...)
   (begin
-    (format #t "assert run-fibers on ~s terminates: " 'exp)
+    (format #t "assert terminates: ~s: " '(run-fibers (lambda () exp) kw ...))
     (force-output)
     (let ((start (get-internal-real-time)))
       (call-with-values (lambda () (run-fibers (lambda () exp) kw ...))
@@ -53,7 +53,8 @@
 
 (define-syntax-rule (assert-run-fibers-returns (expected ...) exp)
   (begin
-    (call-with-values (lambda () (assert-run-fibers-terminates exp))
+    (call-with-values (lambda ()
+                        (assert-run-fibers-terminates exp #:drain? #t))
       (lambda run-fiber-return-vals
         (assert-equal '(expected ...) run-fiber-return-vals)))))
 
@@ -66,25 +67,25 @@
 (assert-equal #f #f)
 (assert-terminates #t)
 (assert-equal #f (false-if-exception (begin (run-fibers) #t)))
-(assert-run-fibers-terminates (sleep 1))
-(assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () #t))))
-(assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () #t))))
-(assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () #t))))
-(assert-run-fibers-terminates (do-times 1000 (spawn-fiber (lambda () #t))))
-(assert-run-fibers-terminates (do-times 10000 (spawn-fiber (lambda () #t))))
-(assert-run-fibers-terminates (do-times 100000 (spawn-fiber (lambda () #t))))
+(assert-run-fibers-terminates (sleep 1) #:drain? #t)
+(assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () #t))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () #t))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () #t))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 1000 (spawn-fiber (lambda () #t))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 10000 (spawn-fiber (lambda () #t))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber (lambda () #t))) #:drain? #t)
 (assert-run-fibers-terminates (do-times 100000
-                                        (spawn-fiber (lambda () #t) #:parallel? #t)))
+                                        (spawn-fiber (lambda () #t) #:parallel? #t)) #:drain? #t)
 (define (loop-to-1e4) (let lp ((i 0)) (when (< i #e1e4) (lp (1+ i)))))
-(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4)))
-(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4 #:parallel? #t)))
-(assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () (sleep 1)))))
-(assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () (sleep 1)))))
-(assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () (sleep 1)))))
-(assert-run-fibers-terminates (do-times 1000 (spawn-fiber (lambda () (sleep 1)))))
-(assert-run-fibers-terminates (do-times 10000 (spawn-fiber (lambda () (sleep 1)))))
-(assert-run-fibers-terminates (do-times 20000 (spawn-fiber (lambda () (sleep 1)))))
-(assert-run-fibers-terminates (do-times 40000 (spawn-fiber (lambda () (sleep 1)))))
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4)) #:drain? #t)
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4 #:parallel? #t)) #:drain? #t)
+(assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 1000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 10000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 20000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 40000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
 
 (define (spawn-fiber-tree n leaf)
   (do-times n (spawn-fiber
@@ -92,20 +93,20 @@
                  (if (= n 1)
                      (leaf)
                      (spawn-fiber-tree (1- n) leaf))))))
-(assert-run-fibers-terminates (spawn-fiber-tree 5 (lambda () (sleep 1))))
+(assert-run-fibers-terminates (spawn-fiber-tree 5 (lambda () (sleep 1))) #:drain? #t)
 
 (define (spawn-fiber-chain n)
   (spawn-fiber
    (lambda ()
      (unless (zero? (1- n))
        (spawn-fiber-chain (1- n))))))
-(assert-run-fibers-terminates (spawn-fiber-chain 5))
-(assert-run-fibers-terminates (spawn-fiber-chain 50))
-(assert-run-fibers-terminates (spawn-fiber-chain 500))
-(assert-run-fibers-terminates (spawn-fiber-chain 5000))
-(assert-run-fibers-terminates (spawn-fiber-chain 50000))
-(assert-run-fibers-terminates (spawn-fiber-chain 500000))
-(assert-run-fibers-terminates (spawn-fiber-chain 5000000))
+(assert-run-fibers-terminates (spawn-fiber-chain 5) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-chain 50) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-chain 500) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-chain 5000) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-chain 50000) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-chain 500000) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-chain 5000000) #:drain? #t)
 
 (let ((run-order 0))
   (define (test-run-order count)
@@ -116,7 +117,7 @@
                      (error "bad run order" run-order n))
                    (set! run-order (1+ n)))))
               (iota count)))
-  (assert-run-fibers-terminates (test-run-order 10) #:parallelism 1))
+  (assert-run-fibers-terminates (test-run-order 10) #:parallelism 1 #:drain? #t))
 
 (let ((run-order 0))
   (define (test-wakeup-order count)
@@ -127,7 +128,7 @@
                      (error "bad run order" run-order n))
                    (set! run-order (1+ n)))))
               (iota count)))
-  (assert-run-fibers-terminates (test-wakeup-order 10) #:parallelism 1))
+  (assert-run-fibers-terminates (test-wakeup-order 10) #:parallelism 1 #:drain? #t))
 
 (assert-run-fibers-returns (1) 1)
 
@@ -143,7 +144,7 @@
                      (set! failed? (< elapsed timeout)))))))
 
 (assert-run-fibers-terminates
- (do-times 20 (check-sleep (random 1.0))))
+ (do-times 20 (check-sleep (random 1.0))) #:drain? #t)
 
 ;; exceptions
 

@@ -35,6 +35,7 @@
             scheduler-runcount
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
             scheduler-remote-peers
+            scheduler-work-pending?
             choose-parallel-scheduler
             run-scheduler
             destroy-scheduler
@@ -243,27 +244,6 @@ thread."
               (resume revents))
           (lp waiters)))))))
 
-(define (scheduler-finished? sched finished?)
-  (and (finished?)
-       (psq-empty? (scheduler-timers sched))))
-
-(define (scheduler-poll-timeout sched finished?)
-  (cond
-   ((not (stack-empty? (scheduler-next-runqueue sched)))
-    ;; Don't sleep if there are fibers in the runqueue already.
-    0)
-   ((psq-empty? (scheduler-timers sched))
-    ;; Avoid sleeping if the scheduler is actually finished.
-    (if (finished?) 0 -1))
-   (else
-    (match (psq-min (scheduler-timers sched))
-      ((expiry . thunk)
-       (let ((now (get-internal-real-time)))
-         (if (< expiry now)
-             0
-             (round/ (- expiry now)
-                     internal-time-units-per-millisecond))))))))
-
 (define (run-timers sched)
   ;; Run expired timer thunks in the order that they expired.
   (let ((now (get-internal-real-time)))
@@ -279,7 +259,7 @@ thread."
              (thunk)
              (run-timers timers)))))))))
 
-(define (schedule-runnables-for-next-turn sched finished?)
+(define (schedule-runnables-for-next-turn sched)
   ;; Called when all runnables from the current turn have been run.
   ;; Note that there may be runnables already scheduled for the next
   ;; turn; one way this can happen is if a fiber suspended itself
@@ -288,11 +268,24 @@ thread."
   ;; In any case, check the kernel to see if any of the fd's that we
   ;; are interested in are active, and in that case schedule their
   ;; corresponding fibers.  Also run any timers that have timed out.
+  (define (timers-expiry timers)
+    (and (not (psq-empty? timers))
+         (match (psq-min timers)
+           ((expiry . thunk)
+            expiry))))
+  (define (update-expiry expiry)
+    ;; If there are pending runnables, cause epoll to return
+    ;; immediately.
+    (if (stack-empty? (scheduler-next-runqueue sched))
+        expiry
+        0))
   (epoll (scheduler-epfd sched)
-         #:get-timeout (lambda () (scheduler-poll-timeout sched finished?))
-         #:folder (lambda (fd revents seed)
+         #:expiry (timers-expiry (scheduler-timers sched))
+         #:update-expiry update-expiry
+         #:folder (lambda (fd revents sched)
                     (schedule-fibers-for-fd fd revents sched)
-                    seed))
+                    sched)
+         #:seed sched)
   (run-timers sched))
 
 (define (fiber-stealer sched)
@@ -304,6 +297,13 @@ stolen."
       (let ((peer (selector)))
         (and peer
              (stack-pop! (scheduler-current-runqueue peer) #f))))))
+
+(define (scheduler-work-pending? sched)
+  "Return @code{#t} if @var{sched} has any work pending: any runnable
+fibers or any pending timeouts."
+  (not (and (psq-empty? (scheduler-timers sched))
+            (stack-empty? (scheduler-current-runqueue sched))
+            (stack-empty? (scheduler-next-runqueue sched)))))
 
 (define* (run-scheduler sched finished?)
   "Run @var{sched} until there are no more fibers ready to run, no
@@ -326,30 +326,25 @@ Return zero values."
           (set-fiber-continuation! fiber k)
           (after-suspend fiber))))
     (let next-turn ()
-      (schedule-runnables-for-next-turn sched finished?)
-      (stack-push-list! cur (reverse (stack-pop-all! next)))
-      (let next-fiber ()
-        (match (stack-pop! cur #f)
-          (#f
-           (cond
-            ((stack-empty? next)
-             ;; Both current and next runqueues are empty; steal a
-             ;; little bit of work from a remote scheduler if we
-             ;; can.  Run it directly instead of pushing onto a
-             ;; queue to avoid double stealing.
-             (match (steal-fiber!)
-               (#f
-                (unless (scheduler-finished? sched finished?)
-                  (next-turn)))
-               (fiber
-                (set-fiber-scheduler! fiber sched)
-                (run-fiber fiber)
-                (next-turn))))
-            (else
-             (next-turn))))
-          (fiber
-           (run-fiber fiber)
-           (next-fiber)))))))
+      (unless (finished?)
+        (schedule-runnables-for-next-turn sched)
+        (stack-push-list! cur (reverse (stack-pop-all! next)))
+        (let next-fiber ()
+          (match (stack-pop! cur #f)
+            (#f
+             (when (stack-empty? next)
+               ;; Both current and next runqueues are empty; steal a
+               ;; little bit of work from a remote scheduler if we
+               ;; can.  Run it directly instead of pushing onto a
+               ;; queue to avoid double stealing.
+               (let ((fiber (steal-fiber!)))
+                 (when fiber
+                   (set-fiber-scheduler! fiber sched)
+                   (run-fiber fiber))))
+             (next-turn))
+            (fiber
+             (run-fiber fiber)
+             (next-fiber))))))))
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."

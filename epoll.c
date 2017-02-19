@@ -130,17 +130,20 @@ do_epoll_wait (void *p)
   return NULL;
 }
 
+static scm_t_uint64 time_units_per_millisecond;
+
 /* Wait on the files whose descriptors were registered on EPFD, and
    write the resulting events in EVENTSV, a bytevector.  Returns the
    number of struct epoll_event values that were written to EVENTSV,
    which may be zero if no files triggered wakeups within TIMEOUT
-   milliseconds.  */
+   internal time units.  */
 static SCM
 scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
                           SCM eventsv, SCM timeout)
 #define FUNC_NAME "primitive-epoll-wait"
 {
-  int c_epfd, c_wakefd, c_wokefd, maxevents, rv, c_timeout;
+  int c_epfd, c_wakefd, c_wokefd, maxevents, rv, millis;
+  scm_t_int64 c_timeout;
   struct epoll_event *events;
 
   c_epfd = scm_to_int (epfd);
@@ -153,16 +156,24 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
 
   events = (struct epoll_event *) SCM_BYTEVECTOR_CONTENTS (eventsv);
   maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (*events);
-  c_timeout = scm_to_int (timeout);
+  c_timeout = scm_to_int64 (timeout);
+  if (c_timeout < 0)
+    millis = -1;
+  else
+    millis = c_timeout / time_units_per_millisecond;
 
-  if (scm_c_prepare_to_wait_on_fd (c_wakefd))
+  if (millis != 0 && scm_c_prepare_to_wait_on_fd (c_wakefd))
     rv = 0;
   else
     {
-      struct epoll_wait_data data = { c_epfd, events, maxevents, c_timeout };
-      scm_without_guile (do_epoll_wait, &data);
+      struct epoll_wait_data data = { c_epfd, events, maxevents, millis };
+      if (millis != 0)
+        scm_without_guile (do_epoll_wait, &data);
+      else
+        do_epoll_wait (&data);
       rv = data.rv;
-      scm_c_wait_finished ();
+      if (millis != 0)
+        scm_c_wait_finished ();
       if (rv < 0)
         {
           if (data.err == EINTR)
@@ -207,6 +218,8 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
 void
 init_fibers_epoll (void)
 {
+  time_units_per_millisecond = scm_c_time_units_per_second / 1000;
+
   scm_c_define_gsubr ("primitive-epoll-wake", 1, 0, 0,
                       scm_primitive_epoll_wake);
   scm_c_define_gsubr ("primitive-epoll-create", 1, 0, 0,

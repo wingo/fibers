@@ -150,24 +150,35 @@ epoll wait (if appropriate)."
           (set-epoll-eventsv! epoll v)
           v))))
 
-(define* (epoll epoll #:key (get-timeout (lambda () -1))
+(define* (epoll epoll #:key (expiry #f)
+                (update-expiry (lambda (expiry) expiry))
                 (folder epoll-default-folder) (seed '()))
-  (atomic-box-set! (epoll-state epoll) 'waiting)
+  (define (expiry->timeout expiry)
+    (cond
+     ((not expiry) -1)
+     (else
+      (let ((now (get-internal-real-time)))
+        (cond
+         ((< expiry now) 0)
+         (else (- expiry now)))))))
   (let* ((maxevents (epoll-maxevents epoll))
          (eventsv (ensure-epoll-eventsv epoll maxevents))
          (write-pipe-fd (fileno (epoll-wake-write-pipe epoll)))
          (read-pipe-fd (fileno (epoll-wake-read-pipe epoll)))
-         (n (primitive-epoll-wait (epoll-fd epoll) write-pipe-fd read-pipe-fd
-                                  eventsv (get-timeout))))
-    ;; If we received `maxevents' events, it means that probably there
-    ;; are more active fd's in the queue that we were unable to
-    ;; receive.  Expand our event buffer in that case.
-    (when (= n maxevents)
-      (set-epoll-maxevents! epoll (* maxevents 2)))
-    (atomic-box-set! (epoll-state epoll) 'not-waiting)
-    (let lp ((seed seed) (i 0))
-      (if (< i n)
-          (let ((fd (bytevector-s32-native-ref eventsv (fd-offset i)))
-                (events (bytevector-u32-native-ref eventsv (events-offset i))))
-            (lp (folder fd events seed) (1+ i)))
-          seed))))
+         (timeout (expiry->timeout (update-expiry expiry))))
+    (atomic-box-set! (epoll-state epoll) 'waiting)
+    (let ((n (primitive-epoll-wait (epoll-fd epoll)
+                                   write-pipe-fd read-pipe-fd
+                                   eventsv timeout)))
+      (atomic-box-set! (epoll-state epoll) 'not-waiting)
+      ;; If we received `maxevents' events, it means that probably there
+      ;; are more active fd's in the queue that we were unable to
+      ;; receive.  Expand our event buffer in that case.
+      (when (= n maxevents)
+        (set-epoll-maxevents! epoll (* maxevents 2)))
+      (let lp ((seed seed) (i 0))
+        (if (< i n)
+            (let ((fd (bytevector-s32-native-ref eventsv (fd-offset i)))
+                  (events (bytevector-u32-native-ref eventsv (events-offset i))))
+              (lp (folder fd events seed) (1+ i)))
+            seed)))))

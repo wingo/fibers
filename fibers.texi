@@ -372,11 +372,6 @@ fully cooperative scheduling model.
 To enable expressive cross-kernel-thread communications, channel sends
 and receives are atomic and thread-safe.
 
-To start scheduling fibers, user code will typically create a
-scheduler, instate it on the thread, add some fibers, then run the
-scheduler.  That call to run the scheduler will only return when there
-there are no more fibers waiting to be scheduled.
-
 @node Parallelism
 @section Parallelism
 
@@ -480,10 +475,10 @@ thread, use @code{run-fibers}.
        [#:scheduler=@code{#f}] @
        [#:parallelism=@code{(current-processor-count)}] @
        [#:cpus=@code{(getaffinity 0)}] @
-       [#:hz=100]
+       [#:hz=@code{100}] [#:drain?=@code{#f}]
 Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
-until the scheduler has no more runnable fibers.  Return the value(s)
-returned by the call to @var{init-thunk}.
+until @var{init-thunk} returns.  Return the value(s) returned by the
+call to @var{init-thunk}.
 
 For example:
 @example
@@ -509,6 +504,10 @@ pre-existing scheduler (because you used the internals interface to
 create one), you can pass it to @code{run-fibers} using the
 @code{#:scheduler} keyword argument.  In that case the scheduler will
 not be destroyed when @code{run-fibers} finishes.
+
+@code{run-fibers} will return when the @var{init-thunk} call returns.
+To make it additionally wait until there are no more runnable fibers
+or pending timeouts, specify the @code{#:drain? #t} keyword argument.
 
 If @code{run-fibers} creates a scheduler on your behalf, it will
 arrange for a number of ``peer'' schedulers to also be created, up to
