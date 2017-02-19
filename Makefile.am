@@ -52,6 +52,7 @@ epoll_la_SOURCES = epoll.c
 epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 epoll_la_LIBADD = $(GUILE_LIBS)
 epoll_la_LDFLAGS = -export-dynamic -module
+$(GOBJECTS): epoll.la
 
 fibers/config.scm: Makefile fibers/config.scm.in
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
