@@ -55,6 +55,7 @@ epoll_la_LDFLAGS = -export-dynamic -module
 $(GOBJECTS): epoll.la
 
 fibers/config.scm: Makefile fibers/config.scm.in
+	mkdir -p fibers
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
