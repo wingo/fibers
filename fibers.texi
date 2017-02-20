@@ -1309,10 +1309,9 @@ server:
 (run-server handler 'fibers)
 @end example
 
-Performance seems to be on par with the standard web server backend
+Performance seems to be about 60% of the standard web server backend
 implementation shipped with Guile, though it is not as
-battle-hardened.  @xref{Barriers}, as well, for things that need
-improving on the Guile side of things.
+battle-hardened.
 
 The fibers web server backend is an interesting case because it uses
 channels to invert the inversion-of-control imposed on the backend by
@@ -1330,7 +1329,7 @@ per-client loops:
     (#(response body)
      (values response body))))
 (let loop ()
-  (match (accept socket)
+  (match (accept socket SOCK_NONBLOCK)
     ((client . sockaddr)
      ;; ...
      (spawn-fiber (lambda () (client-loop client have-request))
@@ -1396,19 +1395,18 @@ server)} module:
 Compared to the Fibers web server backend (@pxref{Web Server
 Backend}), using the standalone fibers web server enables more
 parallelism, as the handlers can run in parallel when you have
-multiple cores.
+multiple cores.  Single-core performance of the standalone server is
+slightly better than the web server backend, and unlike the backend it
+scales with the number of cores available.
 
 @node Status
 @chapter Project status
 
-It's early days.  At the time of this writing, no one uses fibers in
-production that we are aware of.  Should you be the first?  Well
-maybe, if you feel like you understand the implementation, are
-prepared to debug, and have some time on your hands.  Otherwise
-probably it's better to wait.
-
-See the @code{TODO.md} file in the repository for a current list of
-to-do items.
+Fibers is feature-complete and ready to go!  It's early days but
+things are solid enough to say without embarrassment or misgiving that
+Guile now has a solid concurrency story.  Use fibers, incorporate it
+directly into your project, fork it, improve it: what happens now is
+up to you.  Happy hacking and godspeed!
 
 @c @node Concept Index
 @c @unnumbered Concept Index
