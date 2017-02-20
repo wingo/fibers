@@ -19,14 +19,11 @@
 
 (use-modules (rnrs bytevectors)
              (fibers)
+             (fibers channels)
              (ice-9 binary-ports)
              (ice-9 textual-ports)
              (ice-9 rdelim)
              (ice-9 match))
-
-(define (set-nonblocking! port)
-  (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
-  (setvbuf port 'block 1024))
 
 (define (server-error port msg . args)
   (close-port port)
@@ -104,8 +101,9 @@
                       (addrinfo:socktype addrinfo)
                       (addrinfo:protocol addrinfo))))
     ;; Disable Nagle's algorithm.  We buffer ourselves.
-    (setsockopt port IPPROTO_TCP TCP_NODELAY 0)
-    (set-nonblocking! port)
+    (setsockopt port IPPROTO_TCP TCP_NODELAY 1)
+    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
+    (setvbuf port 'block 1024)
     (connect port (addrinfo:addr addrinfo))
     port))
 
@@ -129,12 +127,17 @@
   ;; The getaddrinfo call blocks, unfortunately.  Call it once before
   ;; spawning clients.
   (let ((addrinfo (car (getaddrinfo "localhost" (number->string 11211)))))
-    (let lp ((n 0))
-      (when (< n num-clients)
-        (spawn-fiber
-         (lambda ()
-           (client-loop addrinfo n num-connections)))
-        (lp (1+ n))))))
+    (for-each
+     get-message
+     (map (lambda (n)
+            (let ((ch (make-channel)))
+              (spawn-fiber
+               (lambda ()
+                 (client-loop addrinfo n num-connections)
+                 (put-message ch 'done))
+               #:parallel? #t)
+              ch))
+          (iota num-clients)))))
 
 (run-fibers
  (lambda ()

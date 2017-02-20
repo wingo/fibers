@@ -25,17 +25,14 @@
              (ice-9 rdelim)
              (ice-9 match))
 
-(define (set-nonblocking! port)
-  (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
-  (setvbuf port 'block 1024))
-
 (define (connect-to-server addrinfo)
   (let ((port (socket (addrinfo:fam addrinfo)
                       (addrinfo:socktype addrinfo)
                       (addrinfo:protocol addrinfo))))
     ;; Disable Nagle's algorithm.  We buffer ourselves.
-    (setsockopt port IPPROTO_TCP TCP_NODELAY 0)
-    (set-nonblocking! port)
+    (setsockopt port IPPROTO_TCP TCP_NODELAY 1)
+    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
+    (setvbuf port 'block 1024)
     (connect port (addrinfo:addr addrinfo))
     port))
 
