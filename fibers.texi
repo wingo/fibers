@@ -1168,21 +1168,17 @@ We run the server within a @code{run-fibers} call.
 @end example
 
 Up to here, all good.  Perhaps we should look at how to open a socket;
-here are a couple helpers that appear often in applications that use
+here's a couple helper that appears often in applications that use
 suspendable ports.  @xref{Non-Blocking I/O,,,guile.info,Guile
 Reference Manual}, for full details.
 
 @example
-(define (set-nonblocking! port)
-  (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
-  (setvbuf port 'block 1024))
-
 (define (make-default-socket family addr port)
   (let ((sock (socket PF_INET SOCK_STREAM 0)))
     (setsockopt sock SOL_SOCKET SO_REUSEADDR 1)
     (fcntl sock F_SETFD FD_CLOEXEC)
+    (fcntl sock F_SETFL (logior O_NONBLOCK (fcntl sock F_GETFL)))
     (bind sock family addr port)
-    (set-nonblocking! sock)
     sock))
 @end example
 
@@ -1193,11 +1189,8 @@ new connections, forking off a fiber for each connection:
 @example
 (define (socket-loop socket store)
   (let loop ()
-    (match (accept socket)
+    (match (accept socket SOCK_NONBLOCK)
       ((client . addr)
-       (set-nonblocking! client)
-       ;; Disable Nagle's algorithm.  We buffer ourselves.
-       (setsockopt client IPPROTO_TCP TCP_NODELAY 0)
        (spawn-fiber (lambda () (client-loop client addr store)))
        (loop)))))
 @end example
@@ -1206,6 +1199,9 @@ Finally, the loop to handle a single client:
 
 @example
 (define (client-loop port addr store)
+  (setvbuf port 'block 1024)
+  ;; Disable Nagle's algorithm.  We buffer ourselves.
+  (setsockopt port IPPROTO_TCP TCP_NODELAY 1)
   (let loop ()
     ;; TODO: Restrict read-line to 512 chars.
     (let ((line (read-line port)))
@@ -1258,9 +1254,9 @@ this:
 @example
 $ time ./env guile examples/ping-client.scm 1000 100
 
-real	0m2.478s
-user	0m1.632s
-sys	0m0.552s
+real	0m2.333s
+user	0m3.240s
+sys	0m0.796s
 @end example
 
 That's a throughput of somewhere around 40000 fiber switches per
@@ -1281,13 +1277,14 @@ Run the client as with the ping client:
 @example
 $ time ./env guile examples/memcached-client.scm 1000 100
 
-real	0m8.399s
-user	0m6.492s
-sys	0m1.456s
+real	0m6.343s
+user	0m9.868s
+sys	0m1.808s
 @end example
 
-Here we see a throughput of around 12000 puts plus 12000 gets per
-second; pretty good for a basic implementation.
+Here we see a throughput of around 16000 puts plus 16000 gets per
+second on this 2-core, 2-thread-per-core machine; pretty OK for a
+basic implementation.
 
 @node Web Server Backend
 @section Web Server Backend
