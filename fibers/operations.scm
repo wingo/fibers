@@ -165,10 +165,12 @@ the operation cannot complete directly, block until it can complete."
              ((eq? (current-thread) thread)
               (set! k thunk))
              (else
-              (lock-mutex mutex)
-              (set! k thunk)
-              (signal-condition-variable condvar)
-              (unlock-mutex mutex))))
+              (call-with-blocked-asyncs
+               (lambda ()
+                 (lock-mutex mutex)
+                 (set! k thunk)
+                 (signal-condition-variable condvar)
+                 (unlock-mutex mutex))))))
           (lock-mutex mutex)
           (block #f resume)
           (let lp ()
