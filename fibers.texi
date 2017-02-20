@@ -806,6 +806,11 @@ Return a random scheduler from @var{sched}'s peer set.  Note that
 @var{sched}'s peer set includes @var{sched} itself.
 @end defun
 
+@defun scheduler-work-pending? sched
+Return @code{#t} if @var{sched} has any work pending: any runnable
+fibers or any pending timeouts.
+@end defun
+
 @defun run-scheduler sched finished?
 Run @var{sched} until there are no more fibers ready to run, no file
 descriptors being waited on, and no more timers pending to run, and
