@@ -51,6 +51,11 @@
   #:use-module (srfi srfi-9 gnu)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
+  #:use-module ((ice-9 threads)
+                #:select (current-thread
+                          make-mutex make-condition-variable
+                          lock-mutex unlock-mutex
+                          wait-condition-variable signal-condition-variable))
   #:use-module (fibers internal)
   #:export (wrap-operation
             choice-operation
