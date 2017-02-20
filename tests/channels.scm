@@ -71,6 +71,28 @@
 
 (assert-run-fibers-returns (75025) (rpc-fib 24))
 
+(define (pingpong M N)
+  (let ((request (make-channel)))
+    (for-each (lambda (m)
+                (spawn-fiber (lambda ()
+                               (let lp ((n 0))
+                                 (when (< n N)
+                                   (let ((reply (make-channel)))
+                                     (put-message request reply)
+                                     (get-message reply)
+                                     (lp (1+ n))))))
+                             #:parallel? #t))
+              (iota M))
+    (let lp ((m 0))
+      (when (< m M)
+        (let lp ((n 0))
+          (when (< n N)
+            (put-message (get-message request) 'foo)
+            (lp (1+ n))))
+        (lp (1+ m))))))
+
+(assert-run-fibers-terminates (pingpong (current-processor-count) 1000))
+
 ;; timed channel wait
 
 ;; multi-channel wait
