@@ -39,7 +39,6 @@
   #:use-module (fibers channels))
 
 (define (set-nonblocking! port)
-  (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL)))
   (setvbuf port 'block 1024))
 
 (define (make-default-socket family addr port)
@@ -47,7 +46,7 @@
     (setsockopt sock SOL_SOCKET SO_REUSEADDR 1)
     (fcntl sock F_SETFD FD_CLOEXEC)
     (bind sock family addr port)
-    (set-nonblocking! sock)
+    (fcntl sock F_SETFL (logior O_NONBLOCK (fcntl sock F_GETFL)))
     sock))
 
 (define-record-type <server>
@@ -71,7 +70,7 @@
   ;; receive confirmation for their SYN, leading them to retry --
   ;; probably successfully, but with a large latency.
   (listen socket 1024)
-  (set-nonblocking! socket)
+  (fcntl socket F_SETFL (logior O_NONBLOCK (fcntl socket F_GETFL)))
   (sigaction SIGPIPE SIG_IGN)
   (let* ((request-channel (make-channel))
          (thread (call-with-new-thread
@@ -96,6 +95,10 @@
            (else #f)))))
 
 (define (client-loop client have-request)
+  ;; Always disable Nagle's algorithm, as we handle buffering
+  ;; ourselves.
+  (setsockopt client IPPROTO_TCP TCP_NODELAY 1)
+  (setvbuf client 'block 1024)
   (with-throw-handler #t
     (lambda ()
       (let ((response-channel (make-channel)))
@@ -140,16 +143,8 @@
       (#(response body)
        (values response body))))
   (let loop ()
-    (match (accept socket)
+    (match (accept socket (logior SOCK_NONBLOCK SOCK_CLOEXEC))
       ((client . sockaddr)
-       ;; From "HOP, A Fast Server for the Diffuse Web", Serrano.
-       (setsockopt client SOL_SOCKET SO_SNDBUF (* 12 1024))
-       (set-nonblocking! client)
-       ;; Always disable Nagle's algorithm, as we handle buffering
-       ;; ourselves.  Ignore exceptions if it's not a TCP port, or
-       ;; TCP_NODELAY is not defined on this platform.
-       (false-if-exception
-        (setsockopt client IPPROTO_TCP TCP_NODELAY 0))
        (spawn-fiber (lambda () (client-loop client have-request))
                     #:parallel? #t)
        (loop)))))
