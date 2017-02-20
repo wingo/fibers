@@ -164,12 +164,14 @@ epoll wait (if appropriate)."
   (let* ((maxevents (epoll-maxevents epoll))
          (eventsv (ensure-epoll-eventsv epoll maxevents))
          (write-pipe-fd (fileno (epoll-wake-write-pipe epoll)))
-         (read-pipe-fd (fileno (epoll-wake-read-pipe epoll)))
-         (timeout (expiry->timeout (update-expiry expiry))))
+         (read-pipe-fd (fileno (epoll-wake-read-pipe epoll))))
     (atomic-box-set! (epoll-state epoll) 'waiting)
-    (let ((n (primitive-epoll-wait (epoll-fd epoll)
-                                   write-pipe-fd read-pipe-fd
-                                   eventsv timeout)))
+    ;; Note: update-expiry call must take place after epoll-state is
+    ;; set to waiting.
+    (let* ((timeout (expiry->timeout (update-expiry expiry)))
+           (n (primitive-epoll-wait (epoll-fd epoll)
+                                    write-pipe-fd read-pipe-fd
+                                    eventsv timeout)))
       (atomic-box-set! (epoll-state epoll) 'not-waiting)
       ;; If we received `maxevents' events, it means that probably there
       ;; are more active fd's in the queue that we were unable to
