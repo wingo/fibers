@@ -1,21 +1,21 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016 Free Software Foundation, Inc.
-;;;; 
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-;;;; 
+;;;;
 
 (define-module (fibers)
   #:use-module (ice-9 match)
@@ -67,10 +67,11 @@
      (lambda ()
        (run-scheduler scheduler finished?))))))
 
-(define (start-auxiliary-threads scheduler hz finished? affinities)
+(define (start-auxiliary-threads scheduler hz finished? affinities #:optional thread-init)
   (for-each (lambda (sched affinity)
               (call-with-new-thread
                (lambda ()
+                 (and thread-init (thread-init))
                  (%run-fibers sched hz finished? affinity))))
             (scheduler-remote-peers scheduler) affinities))
 
@@ -99,7 +100,7 @@
         (one-thread-per-cpu)
         (each-thread-has-group-affinity))))
 
-(define* (run-fibers #:optional (init #f)
+(define* (run-fibers #:optional (init #f) (thread-init #f)
                      #:key (hz 100) (scheduler #f)
                      (parallelism (current-processor-count))
                      (cpus (getaffinity 0))
@@ -132,8 +133,9 @@
         ((affinity . affinities)
          (dynamic-wind
            (lambda ()
-             (start-auxiliary-threads scheduler hz finished? affinities))
+             (start-auxiliary-threads scheduler hz finished? affinities thread-init))
            (lambda ()
+             (and thread-init (thread-init))
              (%run-fibers scheduler hz finished? affinity))
            (lambda ()
              (stop-auxiliary-threads scheduler)))))
