@@ -36,9 +36,9 @@
   (let ((out (make-channel)))
     (spawn-fiber (lambda ()
                    (let lp ((ch (integers-from 2)))
-                     (let ((p (get-message ch)))
+                     (let ((p (pk (get-message ch))))
                        (put-message out p)
-                       (lp (sieve 2 ch)))))
+                       (lp (sieve p ch)))))
                  #:parallel? #t)
     out))
 
