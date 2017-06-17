@@ -18,7 +18,7 @@ fan-out-%.csv:
 	../env guile ./scale-bench guile fan-out.scm $* '#e1e5' | tee $@
 
 diagonal-%.csv:
-	../env guile ./scale-bench guile fan-out.scm $* '#e1e5' | tee $@
+	../env guile ./scale-bench guile diagonal.scm $* '#e1e4' | tee $@
 
 sieve-%.csv:
 	../env guile ./scale-bench guile sieve.scm $* | tee $@
