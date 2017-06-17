@@ -27,6 +27,7 @@
         (when (< iteration iteration-count)
           (let ((result (run-test ncores args)))
             (format #t "~a,~a\n" ncores result))
+          (force-output)
           (lp (1+ iteration))))
       (lp (1+ ncores)))))
 
