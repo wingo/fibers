@@ -9,16 +9,16 @@ csv:=$(chain_csv) $(ping_pong_csv) $(fan_out_csv) $(diagonal_csv) $(sieve_csv)
 all: $(csv)
 
 chain-%.csv:
-	/opt/guile/env ../env guile ./scale-bench guile chain.scm $* '#e1e4' | tee $@
+	../env guile ./scale-bench guile chain.scm $* '#e1e4' | tee $@
 
 ping-pong-%.csv:
-	/opt/guile/env ../env guile ./scale-bench guile ping-pong.scm $* '#e1e4' | tee $@
+	../env guile ./scale-bench guile ping-pong.scm $* '#e1e4' | tee $@
 
 fan-out-%.csv:
-	/opt/guile/env ../env guile ./scale-bench guile fan-out.scm $* '#e1e5' | tee $@
+	../env guile ./scale-bench guile fan-out.scm $* '#e1e5' | tee $@
 
 diagonal-%.csv:
-	/opt/guile/env ../env guile ./scale-bench guile fan-out.scm $* '#e1e5' | tee $@
+	../env guile ./scale-bench guile fan-out.scm $* '#e1e5' | tee $@
 
 sieve-%.csv:
-	/opt/guile/env ../env guile ./scale-bench guile sieve.scm $* | tee $@
+	../env guile ./scale-bench guile sieve.scm $* | tee $@
