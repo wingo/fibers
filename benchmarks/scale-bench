@@ -1,0 +1,36 @@
+#!/usr/bin/env guile
+!#
+;; -*- scheme -*-
+
+(use-modules (ice-9 match)
+             (ice-9 threads)
+             ((ice-9 rdelim) #:select (read-line))
+             ((srfi srfi-1) #:select (filter-map append-map)))
+
+(define iteration-count 20)
+
+(define-syntax-rule (time exp)
+  (let ((start (get-internal-real-time)))
+    exp
+    (let ((end (get-internal-real-time)))
+      (/ (- end start) 1.0 internal-time-units-per-second))))
+
+(define (run-test ncores args)
+  (time (apply system* "taskset" "-c" (format #f "0-~a" (1- ncores))
+               args)))
+
+(define (main args)
+  (format #t "Core count,~a\n" (string-join args " "))
+  (let lp ((ncores 1))
+    (when (<= ncores (total-processor-count))
+      (let lp ((iteration 0))
+        (when (< iteration iteration-count)
+          (let ((result (run-test ncores args)))
+            (format #t "~a,~a\n" ncores result))
+          (lp (1+ iteration))))
+      (lp (1+ ncores)))))
+
+(when (batch-mode?)
+  (match (program-arguments)
+    ((_ script . args)
+     (main (cons script args)))))
