@@ -710,6 +710,11 @@ Return @code{#t} if @var{obj} is a condition variable, or @code{#f}
 otherwise.
 @end defun
 
+@defun signal-condition! cvar
+Signal @var{cvar}, notifying all waiting fibers and preventing
+blocking of future fibers waiting on this condition.
+@end defun
+
 @defun wait-operation cvar
 Make an operation that will succeed with no values when @var{cvar}
 becomes signalled.
