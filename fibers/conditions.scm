@@ -37,7 +37,8 @@
             condition?
             signal-condition!
             wait-operation
-            wait))
+            wait
+            (condition-signalled?/public . condition-signalled?)))
 
 (define-record-type <condition>
   (%make-condition signalled? waiters)
@@ -102,3 +103,11 @@ returns @code{#t} otherwise."
 (define (wait cvar)
   "Wait until @var{cvar} has been signalled."
   (perform-operation (wait-operation cvar)))
+
+(define (condition-signalled?/public cvar)
+  "Return @code{#t} if @var{cvar} has already been signalled.
+
+In general you will want to use @code{wait} or @code{wait-operation} to
+wait on a condition.  However, sometimes it is useful to see whether or
+not a condition has already been signalled without blocking if not."
+  (atomic-box-ref (condition-signalled? cvar)))
