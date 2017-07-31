@@ -39,17 +39,48 @@
             wait-operation
             wait))
 
+
+;;; Counter utilities
+;;;
+;;; Counters here are an atomic box containing an integer which are
+;;; either decremented or reset.
+
+;; How many times we run the block-fn until we gc
+(define %steps-till-gc 42)  ; haven't tried testing for the most efficient number
+
+(define (make-counter)
+  (make-atomic-box %steps-till-gc))
+
+(define (counter-decrement! counter)
+  "Decrement integer in atomic box COUNTER."
+  (let spin ((x (atomic-box-ref counter)))
+    (let* ((x-new (1- x))
+           (x* (atomic-box-compare-and-swap! counter x x-new)))
+      (if (= x* x)  ; successful decrement
+          x-new
+          (spin x*)))))
+
+(define (counter-reset! counter)
+  "Reset a counter's contents."
+  (atomic-box-set! counter %steps-till-gc))
+
+
+;;; Conditions
+
+
 (define-record-type <condition>
-  (%make-condition signalled? waiters)
+  (%make-condition signalled? waiters gc-step)
   condition?
   ;; atomic box of bool
   (signalled? condition-signalled?)
   ;; stack of flag+resume pairs
-  (waiters channel-waiters))
+  (waiters channel-waiters)
+  ;; count until garbage collection
+  (gc-step channel-gc-step))
 
 (define (make-condition)
   "Make a fresh condition variable."
-  (%make-condition (make-atomic-box #f) (make-empty-stack)))
+  (%make-condition (make-atomic-box #f) (make-empty-stack) (make-counter)))
 
 (define (resume-waiters! waiters)
   (define (resume-one flag resume)
@@ -83,9 +114,24 @@ returns @code{#t} otherwise."
 (define (wait-operation cvar)
   "Make an operation that will complete when @var{cvar} is signalled."
   (match cvar
-    (($ <condition> signalled? waiters)
+    (($ <condition> signalled? waiters gc-step)
      (define (try-fn) (and (atomic-box-ref signalled?) values))
      (define (block-fn flag sched resume)
+       ;; Decrement the garbage collection counter.
+       ;; If we've surpassed the number of steps until garbage collection,
+       ;; prune out waiters that have already succeeded.
+       ;;
+       ;; Note that it's possible that this number will go negative,
+       ;; but stack-filter! should handle this without errors (though
+       ;; possibly extra spin), and testing against zero rather than
+       ;; less than zero will prevent multiple threads from repeating
+       ;; this work.
+       (when (= (counter-decrement! gc-step) 0)
+         (stack-filter! waiters
+                        (match-lambda
+                          ((flag . resume)
+                           (not (eq? (atomic-box-ref flag) 'S)))))
+         (counter-reset! gc-step))
        ;; We have suspended the current fiber or thread; arrange for
        ;; signal-condition! to call resume-get by adding the flag and
        ;; resume callback to the cvar's waiters stack.

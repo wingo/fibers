@@ -24,7 +24,8 @@
             stack-push!
             stack-push-list!
             stack-pop!
-            stack-pop-all!))
+            stack-pop-all!
+            stack-filter!))
 
 (define (make-empty-stack)
   (make-atomic-box '()))
@@ -59,3 +60,7 @@
 
 (define (stack-pop-all! sbox)
   (atomic-box-swap! sbox '()))
+
+(define (stack-filter! sbox pred)
+  (update! sbox (lambda (stack)
+                  (values (filter pred stack) #f))))
