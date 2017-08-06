@@ -275,27 +275,42 @@ value.  Return zero values."
         task
         (lambda (k after-suspend)
           (after-suspend sched k))))
-    (with-scheduler
-     sched
-     (let next-turn ()
-       (unless (finished?)
-         (schedule-tasks-for-next-turn sched)
-         (stack-push-list! cur (reverse (stack-pop-all! next)))
-         (let next-task ()
-           (match (stack-pop! cur #f)
-             (#f
-              (when (stack-empty? next)
-                ;; Both current and next runqueues are empty; steal a
-                ;; little bit of work from a remote scheduler if we
-                ;; can.  Run it directly instead of pushing onto a
-                ;; queue to avoid double stealing.
-                (let ((task (steal-work!)))
-                  (when task
-                    (run-task task))))
-              (next-turn))
-             (task
-              (run-task task)
-              (next-task)))))))))
+    (define (next-task)
+      (match (stack-pop! cur #f)
+        (#f
+         (when (stack-empty? next)
+           ;; Both current and next runqueues are empty; steal a
+           ;; little bit of work from a remote scheduler if we
+           ;; can.  Run it directly instead of pushing onto a
+           ;; queue to avoid double stealing.
+           (let ((task (steal-work!)))
+             (when task
+               (run-task task))))
+         (next-turn))
+        (task
+         (run-task task)
+         (next-task))))
+    (define (next-turn)
+      (unless (finished?)
+        (schedule-tasks-for-next-turn sched)
+        (stack-push-list! cur (reverse (stack-pop-all! next)))
+        (next-task)))
+    (define (run-scheduler/error-handling)
+      (catch #t
+        next-task
+        (lambda _ (run-scheduler/error-handling))
+        (let ((err (current-error-port)))
+          (lambda (key . args)
+            (false-if-exception
+             (let ((stack (make-stack #t 4 tag)))
+               (format err "Uncaught exception in task:\n")
+               ;; FIXME: Guile's display-backtrace isn't respecting
+               ;; stack narrowing; manually passing stack-length as
+               ;; depth is a workaround.
+               (display-backtrace stack err 0 (stack-length stack))
+               (print-exception err (stack-ref stack 0)
+                                key args)))))))
+    (with-scheduler sched (run-scheduler/error-handling))))
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."

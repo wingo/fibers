@@ -143,27 +143,13 @@
 The fiber will be scheduled on the next turn.  @var{thunk} will run
 with a copy of the current dynamic state, isolating fluid and
 parameter mutations to the fiber."
-  (define (with-error-handling thunk)
-    (lambda ()
-      (catch #t
-        (lambda ()
-          (%start-stack #t thunk))
-        (lambda _ #f)
-        (let ((err (current-error-port)))
-          (lambda (key . args)
-            (false-if-exception
-             (let ((stack (make-stack #t 4)))
-               (format err "Uncaught exception in fiber:\n")
-               (display-backtrace stack err)
-               (print-exception err (stack-ref stack 0)
-                                key args))))))))
   (define (capture-dynamic-state thunk)
     (let ((dynamic-state (current-dynamic-state)))
       (lambda ()
         (with-dynamic-state dynamic-state thunk))))
   (define (create-fiber sched thunk)
     (schedule-task sched
-                   (capture-dynamic-state (with-error-handling thunk))))
+                   (capture-dynamic-state thunk)))
   (cond
    (sched
     ;; When a scheduler is passed explicitly, it could be there is no
