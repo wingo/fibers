@@ -339,7 +339,7 @@ expressed as an epoll bitfield."
 descriptor @var{fd} becomes readable."
   (schedule-task-when-fd-active sched fd (logior EPOLLIN EPOLLRDHUP) task))
 
-(define (run-task-when-fd-writable sched fd task)
+(define (schedule-task-when-fd-writable sched fd task)
   "Arrange to schedule @var{k} on @var{sched} when the file descriptor
 @var{fd} becomes writable."
   (schedule-task-when-fd-active sched fd EPOLLOUT task))
