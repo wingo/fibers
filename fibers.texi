@@ -1239,10 +1239,6 @@ user	0m2.176s
 sys	0m0.816s
 @end example
 
-real	0m2.333s
-user	0m3.240s
-sys	0m0.796s
-
 That's a throughput of somewhere around 60000 fiber switches per
 second on each side, which is none too shabby.
 
