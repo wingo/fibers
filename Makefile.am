@@ -31,12 +31,12 @@ SOURCES = \
 	fibers/config.scm \
 	fibers/deque.scm \
 	fibers/epoll.scm \
-	fibers/internal.scm \
 	fibers/interrupts.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
 	fibers/posix-clocks.scm \
 	fibers/psq.scm \
+	fibers/scheduler.scm \
 	fibers/stack.scm \
 	fibers/repl.scm \
 	fibers/timers.scm \

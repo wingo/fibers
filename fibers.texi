@@ -4,8 +4,8 @@
 @settitle Fibers
 @c %**end of header
 
-@set VERSION 1.0.0
-@set UPDATED 18 February 2016
+@set VERSION 1.1.0
+@set UPDATED 6 August 2017
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated
@@ -448,13 +448,13 @@ interface, base support for asynchronous operations, implementations
 of operations for channels and timers, and an internals interface.
 
 @menu
-* Using Fibers::        User-facing interface to fibers
-* Operations::          Composable abstractions for concurrency.
-* Channels::            Share memory by communicating.
-* Timers::              Operations on time.
-* Conditions::          Waiting for simple state changes.
-* REPL Commands::       Experimenting with Fibers at the console.
-* Internals::           Scheduler and fiber objects and operations.
+* Using Fibers::         User-facing interface to fibers
+* Operations::           Composable abstractions for concurrency.
+* Channels::             Share memory by communicating.
+* Timers::               Operations on time.
+* Conditions::           Waiting for simple state changes.
+* REPL Commands::        Experimenting with Fibers at the console.
+* Schedulers and Tasks:: Fibers are built from lower-level primitives.
 @end menu
 
 @node Using Fibers
@@ -500,10 +500,10 @@ or writes to prevent other fibers from running, pass @code{#f} as the
 
 By default, @code{run-fibers} will create a fresh scheduler, and
 destroy it after @code{run-fibers} finishes.  If you happen to have a
-pre-existing scheduler (because you used the internals interface to
-create one), you can pass it to @code{run-fibers} using the
-@code{#:scheduler} keyword argument.  In that case the scheduler will
-not be destroyed when @code{run-fibers} finishes.
+pre-existing scheduler (because you used the low-level scheduler
+interface to create one), you can pass it to @code{run-fibers} using
+the @code{#:scheduler} keyword argument.  In that case the scheduler
+will not be destroyed when @code{run-fibers} finishes.
 
 @code{run-fibers} will return when the @var{init-thunk} call returns.
 To make it additionally wait until there are no more runnable fibers
@@ -544,11 +544,6 @@ The fiber will inherit the fluid--value associations (the dynamic
 state) in place when @code{spawn-fiber} is called.  Any
 @code{fluid-set!} or parameter set within the fiber will not affect
 fluid or parameter bindings outside the fiber.
-@end defun
-
-@defun current-fiber
-Return the current fiber, or @code{#f} if not called within the
-dynamic extent of a thunk passed to @code{spawn-fiber}.
 @end defun
 
 @defun sleep seconds
@@ -743,14 +738,9 @@ Show a list of all schedulers.
 Create a new scheduler for fibers, and run it on a new kernel thread.
 @end deffn
 
-@deffn {REPL Command} kill-sched sched
-Shut down the scheduler named @var{sched}.  Use @code{,scheds} to list
+@deffn {REPL Command} kill-sched name
+Shut down the scheduler named @var{name}.  Use @code{,scheds} to list
 scheduler names.
-@end deffn
-
-@deffn {REPL Command} fibers [sched]
-Show a list of all fibers.  If @var{sched} is given, limit to fibers
-bound to the given scheduler.
 @end deffn
 
 @deffn {REPL Command} spawn-fiber exp [sched]
@@ -758,42 +748,72 @@ Spawn a new fiber that runs @var{exp}.  If @var{sched} is given, the
 fiber will be spawned on the given scheduler.
 @end deffn
 
-@deffn {REPL Command} kill-fiber fiber
-Shut down a fiber.
-@end deffn
+@node Schedulers and Tasks
+@section Schedulers and Tasks
 
-@node Internals
-@section Internals
+Internally, fibers are built on top of schedulers and tasks.
 
-These internal interfaces are a bit dangerous, in the sense that if
-they are used wrongly, they can corrupt the state of your program.
-For example, the scheduler has some specific mechanisms to ensure
-thread-safety, and not all of the procedures in this module can be
-invoked on a scheduler from any thread.  We will document them at some
-point, but for now this section is a stub.
+A scheduler runs tasks.  A task is just a thunk (a function of no
+arguments) whose return value is ignored.  A scheduler runs tasks in
+batches, once per turn.  Each turn, a scheduler takes all tasks from
+its ``next'' run-queue and adds them to its ``current'' run-queue, and
+then runs the tasks on the current run-queue in order.  The scheduler
+then goes to the next turn, unless its ``finished?'' function returns
+true.
+
+Both the ``next'' and the ``current'' run-queues are public atomic
+data structures.  Scheduling a task adds it to the ``next'' run-queue.
+Scheduling a task is a thread-safe operation; it can be done by any
+thread.  Scheduling a task on a scheduler running on a remote thread
+will ensure that the thread wakes up from any sleeping operation it
+might be currently engaged in.
+
+There is normally just one scheduler for each kernel thread that runs
+fibers.  Several schedulers can be made aware of each other so that
+they can one can spread out the load when spawning tasks that should
+run in parallel.  Also, before moving to the next turn, a scheduler
+will try to steal work from other schedulers that it knows about,
+popping off an item from the remote scheduler's ``current'' run-queue.
+
+There are two additional sources of tasks for a scheduler: file
+descriptor events and timers.  When gathering tasks to schedule for
+the next turn, a scheduler will call @code{epoll} to be notified of
+activity on file descriptors of interest.  If there are no pending
+tasks on the next run-queue, the call to @code{epoll} will sleep until
+the scheduler is woken up, or until a timer expires.
+
+The capability that allows fibers to be built on schedulers is that
+tasks can suspend.  Suspending a task calls a user-supplied
+after-suspend handler that is passed the continuation of the task.
+The user can then schedule that continuation at some later time.  In
+this way a fiber starts as a single task run by a scheduler, but each
+time it suspends and is resumed, a fresh task consisting of the
+fiber's is scheduled.  The fibers layer also uses other Guile
+mechanisms to isolate fibers from each other, such as dynamic states.
+
+All interfaces in this module are thread-safe except where marked
+otherwise.
 
 @example
-(use-modules (fibers internal))
+(use-modules (fibers scheduler))
 @end example
 
 @defun make-scheduler [#:parallelism=@code{#f}] @
        [#:prompt-tag=@code{(make-prompt-tag "fibers")}]
-
 Make a new scheduler in which to run fibers.  If @var{parallelism} is
 true, it should be an integer indicating the number of schedulers to
 make.  The resulting schedulers will all share the same prompt tag and
 will steal and share out work from among themselves.
 @end defun
 
-@defspec with-scheduler scheduler body ...
-Evaluate @code{(begin @var{body} ...)} in an environment in which
-@var{scheduler} is bound to the current kernel thread.  Signal an
-error if @var{scheduler} is already running in some other kernel
-thread.
-@end defspec
+@defun run-scheduler sched finished?
+Run @var{sched} until calling the supplied @var{finished?} thunk
+returns true.  Return zero values.  Signal an error if @var{scheduler}
+is already running in some other kernel thread.
+@end defun
 
-@defun scheduler-name sched
-Return the name of @var{sched}.
+@defun current-scheduler
+Return the current scheduler, or @code{#f} if no scheduler is current.
 @end defun
 
 @defun scheduler-kernel-thread sched
@@ -801,9 +821,20 @@ Return the kernel thread that @var{sched} is running on, or @code{#f}
 if it is not currently running.
 @end defun
 
+@defun scheduler-runcount sched
+Return the number of tasks that have been run on @var{sched}, modulo
+2@sup{32}.  This interface is useful as a lightweight check to see if
+a remote scheduler is making progress.
+@end defun
+
 @defun scheduler-remote-peers sched
 Return a list of peer schedulers of @var{sched}, not including
 @var{sched} itself.
+@end defun
+
+@defun scheduler-work-pending? sched
+Return @code{#t} if @var{sched} has any work pending: any runnable
+tasks or any pending timeouts.
 @end defun
 
 @defun choose-parallel-scheduler sched
@@ -811,101 +842,45 @@ Return a random scheduler from @var{sched}'s peer set.  Note that
 @var{sched}'s peer set includes @var{sched} itself.
 @end defun
 
-@defun scheduler-work-pending? sched
-Return @code{#t} if @var{sched} has any work pending: any runnable
-fibers or any pending timeouts.
-@end defun
-
-@defun run-scheduler sched finished?
-Run @var{sched} until there are no more fibers ready to run, no file
-descriptors being waited on, and no more timers pending to run, and
-calling the @var{finished?} thunk returns true.  Return zero values.
-@end defun
-
 @defun destroy-scheduler sched
 Release any resources associated with @var{sched}.
 @end defun
 
-@defun resume-on-readable-fd fd fiber
-Arrange to resume @var{fiber} when the file descriptor @var{fd} becomes
-readable.
+@defun schedule-task sched task
+Arrange to run @var{task}, a procedure of no arguments, on the next
+turn of @var{sched}.  If @var{sched} is remote and sleeping, it will
+be woken up.
 @end defun
 
-@defun resume-on-writable-fd fd fiber
-Arrange to resume @var{fiber} when the file descriptor @var{fd} becomes
-writable.
+@defun schedule-task-when-fd-readable sched fd task
+Arrange to schedule @var{task} when the file descriptor @var{fd}
+becomes readable.  @emph{Not thread-safe.}
 @end defun
 
-@defun add-timer sched expiry thunk
-Arrange to call @var{thunk} when the absolute real time is greater
-than or equal to @var{expiry}, expressed in internal time units.
+@defun schedule-task-when-fd-writable sched fd task
+Arrange to schedule @var{task} on @var{sched} when the file descriptor
+@var{fd} becomes writable.  @emph{Not thread-safe.}
 @end defun
 
-@defun create-fiber sched thunk
-Spawn a new fiber in @var{sched} with the continuation @var{thunk}.
-The fiber will be scheduled on the next turn.  @var{thunk} will run
-with a copy of the current dynamic state, isolating fluid and
-parameter mutations to the fiber.
+@defun schedule-task-at-time sched expiry task
+Arrange to schedule @var{task} on @var{sched} when the absolute real
+time is greater than or equal to @var{expiry}, expressed in internal
+time units.  @emph{Not thread-safe.}
 @end defun
 
-@defvar current-fiber
-Return the current fiber, or @code{#f} if no fiber is current.
-@end defvar
-
-@defun kill-fiber fiber
-Try to kill @var{fiber}, causing it to raise an exception.  Note that
-this is currently unimplemented!
+@defun suspend-current-task after-suspend
+Suspend the current task to the current scheduler.  After suspending,
+call the @var{after-suspend} callback with two arguments: the current
+scheduler, and the continuation of the current task.  The continuation
+passed to the @var{after-suspend} handler is the continuation of the
+@code{suspend-current-task} call.
 @end defun
 
-@defun fiber-scheduler fiber
-Return the scheduler of @var{fiber}.  Note that if the fiber is on a
-run queue, this may change out from under you due to work stealing.
-@end defun
-
-@defun fiber-continuation
-Return the continuation of @var{fiber}, or @code{#f} if @var{fiber} is
-not suspended.  Again, if @var{fiber} is on a run queue or could be
-resumed by a parallel scheduler, this continuation may change.
-@end defun
-
-@defun fold-all-schedulers f seed
-Fold @var{f} over the set of known schedulers.  @var{f} will be invoked
-as @code{(@var{f} @var{name} @var{scheduler} @var{seed})}.
-@end defun
-
-@defun scheduler-by-name name
-Return the scheduler named @var{name}, or @code{#f} if no scheduler of
-that name is known.
-@end defun
-
-@defun fold-all-fibers f seed
-Fold @var{f} over the set of known fibers.  @var{f} will be invoked as
-@code{(@var{f} @var{name} @var{fiber} @var{seed})}.
-@end defun
-
-@defun fiber-by-name name
-Return the fiber named @var{name}, or @code{#f} if no fiber of that name
-is known.
-@end defun
-
-@defun suspend-current-fiber [after-suspend]
-Suspend the current fiber.  Call the optional @var{after-suspend}
-callback, if present, with the suspended thread as its argument.
-@end defun
-
-@defun resume-fiber fiber thunk
-Resume @var{fiber}, adding it to the run queue of its scheduler.  The
-fiber will start by applying @var{thunk}.  A fiber @emph{must} only be
-resumed when it is suspended.  This function is thread-safe even if
-@var{fiber} is running on a remote scheduler.
-@end defun
-
-@defun yield-current-fiber
-Yield control to the current scheduler.  Like
-@code{suspend-current-fiber} followed directly by @code{resume-fiber},
-except that it avoids suspending if the current continuation isn't
-suspendable.  Returns @code{#t} if the yield succeeded, or @code{#f}
-otherwise.
+@defun yield-current-task
+Yield control to the current scheduler.  Like calling
+@code{(suspend-current-task schedule-task)} except that it avoids
+suspending if the current continuation isn't suspendable.  Returns
+@code{#t} if the yield succeeded, or @code{#f} otherwise.
 @end defun
 
 @node Pitfalls

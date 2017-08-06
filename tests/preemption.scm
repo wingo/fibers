@@ -20,7 +20,7 @@
 (define-module (tests parameters)
   #:use-module (ice-9 atomic)
   #:use-module (fibers)
-  #:use-module (fibers internal))
+  #:use-module (fibers scheduler))
 
 (define failed? #f)
 

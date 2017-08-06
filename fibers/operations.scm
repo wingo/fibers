@@ -56,7 +56,7 @@
                           make-mutex make-condition-variable
                           lock-mutex unlock-mutex
                           wait-condition-variable signal-condition-variable))
-  #:use-module (fibers internal)
+  #:use-module (fibers scheduler)
   #:export (wrap-operation
             choice-operation
             perform-operation
@@ -151,11 +151,12 @@ the operation cannot complete directly, block until it can complete."
     ;; succeeds.  Otherwise we block the current thread until the
     ;; operation succeeds, to allow for communication between fibers
     ;; and foreign threads.
-    (if (current-fiber)
-        (suspend-current-fiber
-         (lambda (fiber)
-           (define (resume thunk) (resume-fiber fiber thunk))
-           (block (fiber-scheduler fiber) resume)))
+    (if (current-scheduler)
+        ((suspend-current-task
+          (lambda (sched k)
+            (define (resume thunk)
+              (schedule-task sched (lambda () (k thunk))))
+            (block sched resume))))
         (let ((k #f)
               (thread (current-thread))
               (mutex (make-mutex))

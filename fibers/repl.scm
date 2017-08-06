@@ -25,15 +25,27 @@
   #:use-module ((ice-9 threads)
                 #:select (call-with-new-thread cancel-thread join-thread))
   #:use-module (fibers)
-  #:use-module (fibers internal))
+  #:use-module (fibers nameset)
+  #:use-module (fibers scheduler))
+
+(define-once schedulers-nameset (make-nameset))
+
+(define (fold-all-schedulers f seed)
+  "Fold @var{f} over the set of known schedulers.  @var{f} will be
+invoked as @code{(@var{f} @var{name} @var{scheduler} @var{seed})}."
+  (nameset-fold f schedulers-nameset seed))
+(define (scheduler-by-name name)
+  "Return the scheduler named @var{name}, or @code{#f} if no scheduler
+of that name is known."
+  (nameset-ref schedulers-nameset name))
 
 (define repl-current-scheds (make-doubly-weak-hash-table))
 (define (repl-current-sched repl)
   (hashq-ref repl-current-scheds repl))
-(define (repl-set-current-sched! repl sched verbose?)
+(define (repl-set-current-sched! repl name sched verbose?)
   (when verbose?
     (format #t "Scheduler ~a on thread ~a is now current\n."
-            (scheduler-name sched) (scheduler-kernel-thread sched)))
+            name (scheduler-kernel-thread sched)))
   (hashq-set! repl-current-scheds repl sched))
 (define* (repl-ensure-current-sched repl #:optional (verbose? #t))
   (define (sched-alive? sched)
@@ -44,19 +56,20 @@
         (match scheds
           (()
            (let* ((sched (make-scheduler))
+                  (name (nameset-add! schedulers-nameset sched))
                   (thread (call-with-new-thread
                            (lambda ()
                              (run-fibers #:scheduler sched)))))
              (when verbose?
                (format #t "No active schedulers; spawned a new one (#~a).\n"
-                       (scheduler-name sched)))
-             (repl-set-current-sched! repl sched verbose?)
+                       name))
+             (repl-set-current-sched! repl name sched verbose?)
              sched))
           (((id . (and sched (? sched-alive?))) . scheds)
            (when verbose?
              (format #t "No current scheduler; choosing scheduler #~a randomly.\n"
-                     (scheduler-name sched)))
-           (repl-set-current-sched! repl sched verbose?)
+                     id))
+           (repl-set-current-sched! repl id sched verbose?)
            sched)))))
 
 (define-meta-command ((scheds fibers) repl)
@@ -78,54 +91,28 @@ Show a list of schedulers."
 (define-meta-command ((spawn-sched fibers) repl)
   "spawn-sched
 Create a new scheduler for fibers, and run it on a new kernel thread."
-  (let ((sched (make-scheduler)))
+  (let* ((sched (make-scheduler))
+         (name (nameset-add! schedulers-nameset sched)))
     (call-with-new-thread (lambda ()
                             (call-with-new-thread
                              (lambda ()
                                (run-fibers #:scheduler sched)))))
-    (format #t "Spawned scheduler #~a.\n" (scheduler-name sched))))
+    (format #t "Spawned scheduler #~a.\n" name)))
 
-(define-meta-command ((kill-sched fibers) repl sched)
-  "kill-sched SCHED
+(define-meta-command ((kill-sched fibers) repl name)
+  "kill-sched NAME
 Shut down a scheduler."
-  (let ((sched (or (scheduler-by-name sched)
-                   (error "no scheduler with name" sched))))
+  (let ((sched (or (scheduler-by-name name)
+                   (error "no scheduler with name" name))))
     (cond
      ((scheduler-kernel-thread sched)
       => (lambda (thread)
-           (format #t "Killing thread running scheduler #~a...\n"
-                   (scheduler-name sched))
+           (format #t "Killing thread running scheduler #~a...\n" name)
            (cancel-thread thread)
            (join-thread thread)
-           (format #t "Thread running scheduler #~a stopped.\n"
-                   (scheduler-name sched))))
+           (format #t "Thread running scheduler #~a stopped.\n" name)))
      (else
-      (format #t "Scheduler #~a not running.\n" (scheduler-name sched))))))
-
-(define-meta-command ((fibers fibers) repl #:optional sched)
-  "fibers [SCHED]
-Show a list of fibers.
-
-If SCHED is given, limit to fibers bound to the given scheduler."
-  (let ((sched (and sched
-                    (or (scheduler-by-name sched)
-                        (error "no scheduler with name" sched)))))
-    (match (sort (fold-all-fibers acons '())
-                 (match-lambda*
-                   (((id1 . _) (id2 . _)) (< id1 id2))))
-      (() (format #t "No fibers.\n"))
-      (fibers
-       (format #t "~a ~8t~a\n" "fiber" "state")
-       (format #t "~a ~8t~a\n" "-----" "-----")
-       (for-each
-        (match-lambda
-          ((id . fiber)
-           ;; How to show fiber data?  Would be nice to say "suspended
-           ;; at foo.scm:32:4".
-           (when (or (not sched) (eq? (fiber-scheduler fiber) sched))
-             (format #t "~a ~8t~a\n" id
-                     (if (fiber-continuation fiber) "(suspended)" "")))))
-        fibers)))))
+      (format #t "Scheduler #~a not running.\n" name)))))
 
 (define-meta-command ((spawn-fiber fibers) repl (form) #:optional sched)
   "spawn-fiber EXP [SCHED]
@@ -135,8 +122,3 @@ If SCHED is given, the fiber will be spawned on the given scheduler."
   (let ((thunk (repl-prepare-eval-thunk repl (repl-parse repl form)))
         (sched (repl-ensure-current-sched repl)))
     (spawn-fiber thunk sched)))
-
-(define-meta-command ((kill-fiber fibers) repl fiber)
-  "kill-fiber FIBER
-Shut down a fiber."
-  (display "Don't know how to do that yet!\n"))

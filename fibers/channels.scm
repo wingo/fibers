@@ -32,7 +32,6 @@
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
   #:use-module (fibers deque)
-  #:use-module (fibers internal)
   #:use-module (fibers operations)
   #:export (make-channel
             channel?

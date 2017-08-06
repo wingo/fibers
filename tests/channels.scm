@@ -17,7 +17,8 @@
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 ;;;;
 
-(define-module (tests cml)
+(define-module (tests channels)
+  #:use-module ((ice-9 threads) #:select (current-processor-count))
   #:use-module (fibers)
   #:use-module (fibers channels))
 

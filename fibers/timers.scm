@@ -18,7 +18,7 @@
 ;;;; 
 
 (define-module (fibers timers)
-  #:use-module (fibers internal)
+  #:use-module (fibers scheduler)
   #:use-module (fibers operations)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
@@ -39,7 +39,7 @@
           (call-with-new-thread
            (lambda ()
              (define (finished?) #f)
-             (with-scheduler sched (run-scheduler sched finished?))))
+             (run-scheduler sched finished?)))
           sched)))))
 
 (define (timer-operation expiry)
@@ -57,11 +57,12 @@ units.  The operation will succeed with no values."
                              ('C (timer))
                              ('S #f)))
                          (if sched
-                             (add-timer sched expiry timer)
-                             (create-fiber (timer-sched)
-                                           (lambda ()
-                                             (perform-operation (timer-operation expiry))
-                                             (timer)))))))
+                             (schedule-task-at-time sched expiry timer)
+                             (schedule-task
+                              (timer-sched)
+                              (lambda ()
+                                (perform-operation (timer-operation expiry))
+                                (timer)))))))
 
 (define (sleep-operation seconds)
   "Make an operation that will succeed with no values when

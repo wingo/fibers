@@ -20,7 +20,7 @@
 (define-module (fibers)
   #:use-module (ice-9 match)
   #:use-module (ice-9 atomic)
-  #:use-module (fibers internal)
+  #:use-module (fibers scheduler)
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
@@ -29,16 +29,16 @@
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
   #:export (run-fibers spawn-fiber)
-  #:re-export (current-fiber sleep))
+  #:re-export (sleep))
 
 (define (wait-for-readable port)
-  (suspend-current-fiber
-   (lambda (fiber)
-     (resume-on-readable-fd (port-read-wait-fd port) fiber))))
+  (suspend-current-task
+   (lambda (sched k)
+     (schedule-task-when-fd-readable sched (port-read-wait-fd port) k))))
 (define (wait-for-writable port)
-  (suspend-current-fiber
-   (lambda (fiber)
-     (resume-on-writable-fd (port-read-wait-fd port) fiber))))
+  (suspend-current-task
+   (lambda (sched k)
+     (schedule-task-when-fd-writable sched (port-write-wait-fd port) k))))
 
 (define-syntax-rule (with-affinity affinity exp ...)
   (let ((saved #f))
@@ -53,19 +53,17 @@
 (define (%run-fibers scheduler hz finished? affinity)
   (with-affinity
    affinity
-   (with-scheduler
-    scheduler
-    (with-interrupts
-     hz
-     (let ((last-runcount 0))
-       (lambda ()
-         (let* ((runcount (scheduler-runcount scheduler))
-                (res (eqv? runcount last-runcount)))
-           (set! last-runcount runcount)
-           res)))
-     yield-current-fiber
-     (lambda ()
-       (run-scheduler scheduler finished?))))))
+   (with-interrupts
+    hz
+    (let ((last-runcount 0))
+      (lambda ()
+        (let* ((runcount (scheduler-runcount scheduler))
+               (res (eqv? runcount last-runcount)))
+          (set! last-runcount runcount)
+          res)))
+    yield-current-task
+    (lambda ()
+      (run-scheduler scheduler finished?)))))
 
 (define (start-auxiliary-threads scheduler hz finished? affinities)
   (for-each (lambda (sched affinity)
@@ -141,6 +139,31 @@
       (apply values (atomic-box-ref ret))))))
 
 (define* (spawn-fiber thunk #:optional sched #:key parallel?)
+  "Spawn a new fiber which will start by invoking @var{thunk}.
+The fiber will be scheduled on the next turn.  @var{thunk} will run
+with a copy of the current dynamic state, isolating fluid and
+parameter mutations to the fiber."
+  (define (with-error-handling thunk)
+    (lambda ()
+      (catch #t
+        (lambda ()
+          (%start-stack #t thunk))
+        (lambda _ #f)
+        (let ((err (current-error-port)))
+          (lambda (key . args)
+            (false-if-exception
+             (let ((stack (make-stack #t 4)))
+               (format err "Uncaught exception in fiber:\n")
+               (display-backtrace stack err)
+               (print-exception err (stack-ref stack 0)
+                                key args))))))))
+  (define (capture-dynamic-state thunk)
+    (let ((dynamic-state (current-dynamic-state)))
+      (lambda ()
+        (with-dynamic-state dynamic-state thunk))))
+  (define (create-fiber sched thunk)
+    (schedule-task sched
+                   (capture-dynamic-state (with-error-handling thunk))))
   (cond
    (sched
     ;; When a scheduler is passed explicitly, it could be there is no
@@ -152,12 +175,11 @@
                     (current-read-waiter wait-for-readable)
                     (current-write-waiter wait-for-writable)
                     (thunk))))
-   ((current-fiber)
-    => (lambda (fiber)
-         (let ((sched (fiber-scheduler fiber)))
-           (create-fiber (if parallel?
-                             (choose-parallel-scheduler sched)
-                             sched)
-                         thunk))))
+   ((current-scheduler)
+    => (lambda (sched)
+         (create-fiber (if parallel?
+                           (choose-parallel-scheduler sched)
+                           sched)
+                       thunk)))
    (else
     (error "No scheduler current; call within run-fibers instead"))))
