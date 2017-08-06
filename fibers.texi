@@ -1234,12 +1234,16 @@ this:
 @example
 $ time ./env guile examples/ping-client.scm 1000 100
 
+real	0m1.647s
+user	0m2.176s
+sys	0m0.816s
+@end example
+
 real	0m2.333s
 user	0m3.240s
 sys	0m0.796s
-@end example
 
-That's a throughput of somewhere around 40000 fiber switches per
+That's a throughput of somewhere around 60000 fiber switches per
 second on each side, which is none too shabby.
 
 @node Memcached
