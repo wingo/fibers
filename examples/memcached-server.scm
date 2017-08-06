@@ -140,4 +140,6 @@
   (sigaction SIGPIPE SIG_IGN)
   (socket-loop socket (make-hash-table)))
 
-(run-fibers run-memcached)
+;; Have to restrict parallelism as long as we are using a
+;; thread-unsafe hash table as the store!
+(run-fibers run-memcached #:parallelism 1)
