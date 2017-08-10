@@ -33,41 +33,13 @@
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 match)
   #:use-module (fibers stack)
+  #:use-module (fibers counter)
   #:use-module (fibers operations)
   #:export (make-condition
             condition?
             signal-condition!
             wait-operation
             wait))
-
-
-;;; Counter utilities
-;;;
-;;; Counters here are an atomic box containing an integer which are
-;;; either decremented or reset.
-
-;; How many times we run the block-fn until we gc
-(define %steps-till-gc 42)  ; haven't tried testing for the most efficient number
-
-(define (make-counter)
-  (make-atomic-box %steps-till-gc))
-
-(define (counter-decrement! counter)
-  "Decrement integer in atomic box COUNTER."
-  (let spin ((x (atomic-box-ref counter)))
-    (let* ((x-new (1- x))
-           (x* (atomic-box-compare-and-swap! counter x x-new)))
-      (if (= x* x)  ; successful decrement
-          x-new
-          (spin x*)))))
-
-(define (counter-reset! counter)
-  "Reset a counter's contents."
-  (atomic-box-set! counter %steps-till-gc))
-
-
-;;; Conditions
-
 
 (define-record-type <condition>
   (%make-condition signalled? waiters gc-step)

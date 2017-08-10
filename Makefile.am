@@ -29,6 +29,7 @@ SOURCES = \
 	fibers/channels.scm \
 	fibers/conditions.scm \
 	fibers/config.scm \
+	fibers/counter.scm \
 	fibers/deque.scm \
 	fibers/epoll.scm \
 	fibers/interrupts.scm \

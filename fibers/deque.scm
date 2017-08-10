@@ -1,6 +1,7 @@
 ;; Double-ended queue
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+;;;; Copyright (C) 2017 Christopher Allan Webber <cwebber@dustycloud.org>
 ;;;; 
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -27,10 +28,12 @@
             dequeue
             dequeue-all
             dequeue-match
+            dequeue-filter
             undequeue
             dequeue!
             dequeue-all!
-            enqueue!))
+            enqueue!
+            dequeue-filter!))
 
 ;; A functional double-ended queue ("deque") has a head and a tail,
 ;; which are both lists.  The head is in FIFO order and the tail is in
@@ -82,6 +85,12 @@
     ((head . tail)
      (make-deque (cons item head) tail))))
 
+(define (dequeue-filter dq pred)
+  (match dq
+    ((head . tail)
+     (cons (filter pred head)
+           (filter pred tail)))))
+
 (define-inlinable (update! box f)
   (let spin ((x (atomic-box-ref box)))
     (call-with-values (lambda () (f x))
@@ -109,4 +118,9 @@
 (define (enqueue! dqbox item)
   (update! dqbox (lambda (dq)
                    (values (enqueue dq item)
+                           #f))))
+
+(define (dequeue-filter! dqbox pred)
+  (update! dqbox (lambda (dq)
+                   (values (dequeue-filter dq pred)
                            #f))))
