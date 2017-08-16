@@ -93,7 +93,7 @@ socket.
 
 Building a network service with a callback-oriented concurrency system
 means breaking the program into little chunks that can run without
-blocking.  Whereever a program could block, instead of just continuing
+blocking.  Wherever a program could block, instead of just continuing
 the program, you register a callback.  Unfortunately this requirement
 permeates the program, from top to bottom: you always pay the mental
 cost of inverting your program's control flow by turning it into
@@ -188,7 +188,7 @@ mailbox will ``block'', from its perspective.  In the meantime the
 system will run other processes.  Message sends never block, oddly;
 instead, sending to a process with many messages pending makes it more
 likely that Erlang will pre-empt the sending process.  It's a strange
-tradeoff, but it makes sense when you realize that Erlang was designed
+trade off, but it makes sense when you realize that Erlang was designed
 for network transparency: the same message send/receive interface can
 be used to send messages to processes on remote machines as well.
 
@@ -247,7 +247,7 @@ explicit buffer thread.
 
 Whether to buffer or not to buffer is a tricky choice.  It's possible
 to implement singly-buffered channels in a system like Erlang via an
-explicit send/acknowlege protocol, though it seems difficult to
+explicit send/acknowledge protocol, though it seems difficult to
 implement completely unbuffered channels.  As we mentioned, it's
 possible to add buffering to an unbuffered system by the introduction
 of explicit buffer threads.  In the end though in Fibers we follow
@@ -823,7 +823,7 @@ if it is not currently running.
 
 @defun scheduler-runcount sched
 Return the number of tasks that have been run on @var{sched}, modulo
-2@sup{32}.  This interface is useful as a lightweight check to see if
+@math{2^{32}}.  This interface is useful as a lightweight check to see if
 a remote scheduler is making progress.
 @end defun
 
