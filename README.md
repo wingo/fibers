@@ -54,6 +54,8 @@ Homepage: https://github.com/wingo/fibers
 
 Download: https://wingolog.org/pub/fibers/
 
+Manual: https://github.com/wingo/fibers/wiki/Manual
+
 
 ## Build dependencies
 
