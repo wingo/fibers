@@ -132,7 +132,7 @@ do_epoll_wait (void *p)
   return NULL;
 }
 
-static scm_t_uint64 time_units_per_millisecond;
+static uint64_t time_units_per_millisecond;
 
 /* Wait on the files whose descriptors were registered on EPFD, and
    write the resulting events in EVENTSV, a bytevector.  Returns the
@@ -145,7 +145,7 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
 #define FUNC_NAME "primitive-epoll-wait"
 {
   int c_epfd, c_wakefd, c_wokefd, maxevents, rv, millis;
-  scm_t_int64 c_timeout;
+  int64_t c_timeout;
   struct epoll_event *events;
 
   c_epfd = scm_to_int (epfd);
