@@ -26,6 +26,8 @@
 #endif
 
 #include <errno.h>
+#include <unistd.h>
+#include <string.h>
 #include <sys/epoll.h>
 #include <libguile.h>
 
