@@ -22,7 +22,7 @@ AC_PREREQ(2.52)
 AC_INIT([fibers], [1.0.0])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
-AC_CONFIG_MACRO_DIRS([m4])
+AC_CONFIG_MACRO_DIRS([m4 m4-local])
 AM_INIT_AUTOMAKE([serial-tests])
 AC_COPYRIGHT(FIBERS_CONFIGURE_COPYRIGHT)
 AM_CONFIG_HEADER(config.h)
@@ -34,8 +34,17 @@ AC_PROG_CC
 AC_STDC_HEADERS
 AC_PROG_LIBTOOL
 
+
+dnl Checking for supported system event interfaces
+dnl Linux event interface
 AC_CHECK_HEADERS([sys/epoll.h])
 AC_CHECK_FUNCS([epoll_create epoll_create1])
+dnl FreeBSD event interface
+AC_CHECK_HEADERS([sys/event.h])
+AC_CHECK_FUNCS([kqueue kevent])
+AC_HAVE_KQUEUE
+dnl propagate m4-macro results to automake
+AM_CONDITIONAL([HAVE_KQUEUE], [test "x$ac_cv_have_kqueue" = xyes])
 
 WARN_CFLAGS=-Wall
 AC_ARG_ENABLE([Werror], AC_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),

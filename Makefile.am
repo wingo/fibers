@@ -46,18 +46,32 @@ SOURCES = \
 
 BUILT_SOURCES = fibers/config.scm
 
-extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
-extlib_LTLIBRARIES = epoll.la
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
+extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
+
+if HAVE_KQUEUE
+extlib_LTLIBRARIES = kqueue.la
+kqueue_la_SOURCES = kqueue.c
+kqueue_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+kqueue_la_LIBADD = $(GUILE_LIBS)
+kqueue_la_LDFLAGS = -export-dynamic -module
+extfilename = kqueue
+$(GOBJECTS): kqueue.la
+else
+extlib_LTLIBRARIES = epoll.la
 epoll_la_SOURCES = epoll.c
 epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 epoll_la_LIBADD = $(GUILE_LIBS)
 epoll_la_LDFLAGS = -export-dynamic -module
+extfilename = epoll
 $(GOBJECTS): epoll.la
+
+endif # HAVE_KQUEUE
 
 fibers/config.scm: Makefile fibers/config.scm.in
 	mkdir -p fibers
-	sed -e "s|@extlibdir\@|$(extlibdir)|" \
+	sed -e "s|@extlibdir@|$(extlibdir)|" \
+	    -e "s|@extfilename@|$(extfilename)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
 CLEANFILES += fibers/config.scm
