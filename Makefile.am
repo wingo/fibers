@@ -39,12 +39,13 @@ SOURCES = \
 	fibers/psq.scm \
 	fibers/scheduler.scm \
 	fibers/stack.scm \
+	fibers/system.scm \
 	fibers/repl.scm \
 	fibers/timers.scm \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
-BUILT_SOURCES = fibers/config.scm
+BUILT_SOURCES = fibers/config.scm fibers/system.scm
 
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
@@ -56,6 +57,7 @@ kqueue_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 kqueue_la_LIBADD = $(GUILE_LIBS)
 kqueue_la_LDFLAGS = -export-dynamic -module
 extfilename = kqueue
+operating_system = freebsd
 $(GOBJECTS): kqueue.la
 else
 extlib_LTLIBRARIES = epoll.la
@@ -64,17 +66,21 @@ epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 epoll_la_LIBADD = $(GUILE_LIBS)
 epoll_la_LDFLAGS = -export-dynamic -module
 extfilename = epoll
+operating_system = linux
 $(GOBJECTS): epoll.la
-
 endif # HAVE_KQUEUE
 
 fibers/config.scm: Makefile fibers/config.scm.in
 	mkdir -p fibers
 	sed -e "s|@extlibdir@|$(extlibdir)|" \
 	    -e "s|@extfilename@|$(extfilename)|" \
+	    -e "s|@operating-system@|$(operating_system)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-CLEANFILES += fibers/config.scm
+fibers/system.scm: Makefile fibers/system-$(operating_system).scm.in
+	cat $(srcdir)/fibers/system-$(operating_system).scm.in >> fibers/system.scm
+
+CLEANFILES += fibers/config.scm fibers/system.scm
 
 TESTS = \
 	tests/basic.scm \
@@ -89,6 +95,8 @@ TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 EXTRA_DIST += \
 	env.in \
 	fibers/config.scm.in \
+	fibers/system-freebsd.scm.in \
+	fibers/system-linux.scm.in \
 	HACKING \
         COPYING.LESSER \
 	README.md \
