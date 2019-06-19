@@ -49,6 +49,7 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 * Pitfalls::              Stay on the happy path.
 * Examples::              Starting points for a hack.
 * Status::                Fibers is a work in progress.
+* OS Differences::        How Fibers work on different operating systems
 @end menu
 
 @end ifnottex
@@ -1387,6 +1388,100 @@ things are solid enough to say without embarrassment or misgiving that
 Guile now has a solid concurrency story.  Use fibers, incorporate it
 directly into your project, fork it, improve it: what happens now is
 up to you.  Happy hacking and godspeed!
+
+@node OS Differences
+@chapter OS Differences
+
+Fibers was originally adopted on linux. This chapters
+describes how it works differently on other OSs.
+Currently besides Linux, it is supported on FreeBSD.
+
+@node epoll / kqueue
+@section epoll / kqueue
+
+On FreeBSD the similiar interface kqueue(2) is used for
+yielding and waking fibers.
+Please see the man page section 2 for more information on kqueue.
+
+@node CPU affinity
+@section CPU affinity
+
+FreeBSD facilitates processor affinity through the cpuset(2)
+interface, unfortunately though it seems straightforward to implement,
+it is not implemented (yet). See following excerpt for the api.
+
+@example
+int cpuset_getaffinity(cpulevel_t level, cpuwhich_t which, id_t id,
+                       size_t setsize, cpuset_t *mask);
+
+int cpuset_setaffinity(cpulevel_t level, cpuwhich_t which, id_t id,
+                       size_t setsize, const cpuset_t  *mask);
+@end example
+
+For more information on this see the freebsd man pages.
+
+@node clocks
+@section clocks
+
+On FreeBSD for some reason clock_nanosleep doesn't like
+using cpu-thread-clockid, instead the monotonic_fast is used.
+See the example in C below.
+
+@example
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
+#include <time.h>
+
+void *worker(void *arg)
+@{
+  clockid_t cm = *(int*) arg;
+  clockid_t cc;
+  fprintf(stderr, "client here!\n");
+  fprintf(stderr, "client is given main thread clock: %x\n", cm);
+  pthread_getcpuclockid(pthread_self(), &cc);
+  fprintf(stderr, "clients own clockid  is: %x\n", cc);
+
+  struct timespec rqtp;
+  struct timespec rmtp;
+  rqtp.tv_sec = 2;
+  // this works:
+  //clock_nanosleep(CLOCK_MONOTONIC_FAST, 0, &rqtp, &rmtp);
+  // this doesn't work:
+  int e = clock_nanosleep(cm, 0, &rqtp, &rmtp);
+  if(e != 0)@{
+    fprintf(stderr, "ERROR: clock_nanosleep got error: %s!\n", strerror(e));
+  @}
+  return NULL;
+@}
+
+int main (int argc, char **argv)
+@{
+  pthread_t w;
+  clockid_t c = 0;
+  struct timespec rqtp;
+  struct timespec rmtp;
+  rqtp.tv_sec = 4;
+
+  fprintf(stderr, "start\n");
+  clock_getcpuclockid(0, &c);
+  fprintf(stderr, "main: cpu clock: %x\n", c);
+  pthread_getcpuclockid(pthread_self(), &c);
+  fprintf(stderr, "main thread clock: %x\n", c);
+  pthread_create(&w, NULL, worker, &c);
+  //clock_nanosleep(CLOCK_MONOTONIC, 0, &rqtp, &rmtp);
+  int i = clock_nanosleep(CLOCK_MONOTONIC, 0, &rqtp, &rmtp);
+  fprintf(stderr, "main exit: %d\n", i);
+  return 0;
+@}
+@end example
+
+@node Debugging
+@section Debugging
+
+On FreeBSD truss works similar to strace, and is usefull to see what
+extensions is loaded:
+@code{ truss guile -x .libs -L . tests/preemption.scm 2>&1 | grep epoll | grep open }
 
 @c @node Concept Index
 @c @unnumbered Concept Index
