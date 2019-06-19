@@ -1,5 +1,5 @@
 
-;;;; Copyright (C) 2019 Larry Valkama <larryvalkama@protonmail.com>
+;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -19,5 +19,35 @@
 ;; operating-system specifics
 ;; this could turn into a thin portability layer
 
+;; Linux operating specifics:
+;; + clock_nanosleep, handle clock_id which is specified in headers
+
 (define-module (fibers system)
-  #:use-module (system foreign))
+  #:use-module (system foreign)
+  #:export (; posix nanosleep/clock_nanosleep
+            system-clock-nanosleep
+            CLOCK_REALTIME
+            CLOCK_MONOTONIC
+            CLOCK_PROCESS_CPUTIME_ID
+            CLOCK_THREAD_CPUTIME_ID
+            CLOCK_MONOTONIC_RAW
+            CLOCK_REALTIME_COARSE
+            CLOCK_MONOTONIC_COARSE))
+
+(define exe (dynamic-link))
+
+(define clockid-t int32)
+
+(define CLOCK_REALTIME 0)
+(define CLOCK_MONOTONIC 1)
+(define CLOCK_PROCESS_CPUTIME_ID 2)
+(define CLOCK_THREAD_CPUTIME_ID 3)
+(define CLOCK_MONOTONIC_RAW 4)
+(define CLOCK_REALTIME_COARSE 5)
+(define CLOCK_MONOTONIC_COARSE 6)
+
+(define system-clock-nanosleep
+  (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))
+         (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
+    (lambda* (clockid flags buf)
+      (proc clockid flags buf buf))))

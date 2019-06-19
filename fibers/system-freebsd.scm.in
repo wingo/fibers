@@ -24,12 +24,38 @@
 ;;   use a stub instead
 
 (define-module (fibers system)
+  #:use-module (system foreign)
   #:use-module (ice-9 threads)
   #:export (; Processor affinity stubs
             getaffinity
             setaffinity
-            ))
+            ; posix nanosleep/clock_nanosleep
+            system-clock-nanosleep
+            CLOCK_MONOTONIC
+            CLOCK_THREAD_CPUTIME_ID))
+
+(define exe (dynamic-link))
 
 ; Processor affinity stubs
 (define (getaffinity any) (make-bitvector (total-processor-count) #t))
 (define (setaffinity any lvl) 0)
+
+(define clockid-t int32)
+
+; use the monotonic-fast, it is updated every hertz, ie granularity. Check your kern.hz
+(define CLOCK_MONOTONIC 4)
+(define CLOCK_MONOTONIC_FAST 12)
+(define CLOCK_THREAD_CPUTIME_ID 14)
+
+; unfortunately clock_nanosleep(other-cpu-clockid,...) barfs, and we musn't
+; call error in clock-nanosleep, because it is called by the interrupt
+; thread, which is supposed to preempt some other thread.
+; And doing no preemption will lead to deadlocks (catched in test case preemption.scm).
+(define system-clock-nanosleep
+  (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))
+         (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
+    (lambda* (clockid flags buf)
+      ; warning, perhaps clock-nanosleep should just return an error-code?
+      ; though, if it doesn't sleep (which will yield the thread), no preemption is made
+      ; and all bets are off! Perhaps then, call the more coarse/slow nanosleep?
+      (proc CLOCK_MONOTONIC_FAST flags buf buf))))
