@@ -693,7 +693,7 @@ communication.  A condition variable has two states: it starts in the
 associated waiting operations complete.
 
 @example
-(use-modules (fibers contitions))
+(use-modules (fibers conditions))
 @end example
 
 @defun make-condition
