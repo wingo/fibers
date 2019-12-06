@@ -115,7 +115,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
        (when (= (counter-decrement! putq-gc-counter) 0)
          (dequeue-filter! putq-box
                           (match-lambda
-                            (#(flag resume)
+                            (#(flag resume message)
                              (not (eq? (atomic-box-ref flag) 'S)))))
          (counter-reset! putq-gc-counter))
        ;; In the try phase, we scanned the getq for a get operation,
