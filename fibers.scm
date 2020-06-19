@@ -136,7 +136,7 @@
            (lambda ()
              (stop-auxiliary-threads scheduler)))))
       (for-each destroy-scheduler (scheduler-remote-peers scheduler))
-      (destroy-scheduler scheduler)
+      (cleanup-scheduler scheduler)
       (apply values (atomic-box-ref ret))))))
 
 (define* (spawn-fiber thunk #:optional sched #:key parallel?)

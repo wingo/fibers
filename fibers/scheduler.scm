@@ -36,7 +36,7 @@
             scheduler-work-pending?
             choose-parallel-scheduler
             run-scheduler
-            destroy-scheduler
+            cleanup-scheduler
 
             schedule-task
             schedule-task-when-fd-readable
@@ -298,7 +298,7 @@ value.  Return zero values."
     (define (run-scheduler/error-handling)
       (catch #t
         next-task
-        (lambda _ (run-scheduler/error-handling))
+        (lambda args  (apply throw args))
         (let ((err (current-error-port)))
           (lambda (key . args)
             (false-if-exception
@@ -396,3 +396,8 @@ suspending if the current continuation isn't suspendable.  Returns
             (begin
               (abort-to-prompt tag schedule-task)
               #t))))))
+
+(define (cleanup-scheduler sched)
+  (for-each destroy-scheduler (scheduler-remote-peers sched))
+  (destroy-scheduler sched)
+)
