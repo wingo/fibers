@@ -185,14 +185,14 @@ remote kernel thread."
      ;; deactivated our entry in the epoll set.
      (set-car! events+waiters #f)
      (set-cdr! events+waiters '())
-     (unless (zero? (logand revents EPOLLERR))
+     (unless (zero? (logand revents (logior EPOLLHUP EPOLLERR)))
        (hashv-remove! (scheduler-fd-waiters sched) fd))
      ;; Now resume or re-schedule waiters, as appropriate.
      (let lp ((waiters waiters))
        (match waiters
          (() #f)
          (((events . task) . waiters)
-          (if (zero? (logand revents (logior events EPOLLERR)))
+          (if (zero? (logand revents (logior events EPOLLHUP EPOLLERR)))
               ;; Re-schedule.
               (schedule-task-when-fd-active sched fd events task)
               ;; Resume.
