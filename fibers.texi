@@ -532,8 +532,8 @@ The new fiber will run concurrently with other fibers.
 The fiber will be added to the current scheduler, which is usually
 what you want.  It's also possible to spawn the fiber on a specific
 scheduler, which is useful to ensure that the fiber runs on a
-different kernel thread.  In that case, pass the @code{#:scheduler}
-keyword argument.
+different kernel thread.  In that case, pass the optional
+@code{scheduler} argument.
 
 If @var{parallel?} is true, the fiber will be started not
 (necessarily) on @var{scheduler}, but on a random member of the peer
