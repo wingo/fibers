@@ -50,7 +50,7 @@
       (lambda ()
         (setaffinity 0 saved)))))
 
-(define (%run-fibers scheduler hz finished? affinity)
+(define (%run-fibers scheduler hz finished? affinity steal-work?)
   (with-affinity
    affinity
    (with-interrupts
@@ -63,13 +63,13 @@
           res)))
     yield-current-task
     (lambda ()
-      (run-scheduler scheduler finished?)))))
+      (run-scheduler scheduler finished? steal-work?)))))
 
-(define (start-auxiliary-threads scheduler hz finished? affinities)
+(define (start-auxiliary-threads scheduler hz finished? affinities steal-work?)
   (for-each (lambda (sched affinity)
               (call-with-new-thread
                (lambda ()
-                 (%run-fibers sched hz finished? affinity))))
+                 (%run-fibers sched hz finished? affinity steal-work?))))
             (scheduler-remote-peers scheduler) affinities))
 
 (define (stop-auxiliary-threads scheduler)
@@ -102,13 +102,14 @@
                      (parallelism (current-processor-count))
                      (cpus (getaffinity 0))
                      (install-suspendable-ports? #t)
-                     (drain? #f))
+                     (drain? #f)
+                     (steal-work? #t))
   (when install-suspendable-ports? (install-suspendable-ports!))
   (cond
    (scheduler
     (let ((finished? (lambda () #f)))
       (when init (spawn-fiber init scheduler))
-      (%run-fibers scheduler hz finished? cpus)))
+      (%run-fibers scheduler hz finished? cpus steal-work?)))
    (else
     (let* ((scheduler (make-scheduler #:parallelism parallelism))
            (ret (make-atomic-box #f))
@@ -130,9 +131,9 @@
         ((affinity . affinities)
          (dynamic-wind
            (lambda ()
-             (start-auxiliary-threads scheduler hz finished? affinities))
+             (start-auxiliary-threads scheduler hz finished? affinities steal-work?))
            (lambda ()
-             (%run-fibers scheduler hz finished? affinity))
+             (%run-fibers scheduler hz finished? affinity steal-work?))
            (lambda ()
              (stop-auxiliary-threads scheduler)))))
       (destroy-scheduler scheduler)
