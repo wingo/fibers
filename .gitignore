@@ -32,3 +32,4 @@
 /fibers.info
 /build-aux/texinfo.tex
 /fibers/config.scm
+build/
