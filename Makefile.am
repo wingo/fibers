@@ -31,7 +31,7 @@ SOURCES = \
 	fibers/config.scm \
 	fibers/counter.scm \
 	fibers/deque.scm \
-	fibers/epoll.scm \
+	fibers/libevent.scm \
 	fibers/interrupts.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
@@ -44,23 +44,39 @@ SOURCES = \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
-BUILT_SOURCES = fibers/config.scm
+BUILT_SOURCES = fibers/config.scm fibers/posix-clocks.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
-extlib_LTLIBRARIES = epoll.la
-AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
-epoll_la_SOURCES = epoll.c
-epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
-epoll_la_LIBADD = $(GUILE_LIBS)
-epoll_la_LDFLAGS = -export-dynamic -module
-$(GOBJECTS): epoll.la
+extlib_LTLIBRARIES = libevent.la
+AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS) 
+libevent_la_SOURCES = libevent.c
+libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+libevent_la_LIBADD = $(GUILE_LIBS)
+libevent_la_LDFLAGS = -export-dynamic -module
+
+if DARWIN
+libevent_la_CFLAGS += -Wno-error -Wno-nullability-completeness -Wno-expansion-to-defined
+extlib_LTLIBRARIES += affinity.la
+affinity_la_SOURCES = affinity.c
+affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Wno-error -Wno-nullability-completeness -Wno-expansion-to-defined
+affinity_la_LIBADD = $(GUILE_LIBS)
+affinity_la_LDFLAGS = -export-dynamic -module
+$(GOBJECTS): libevent.la affinity.la
+else:
+$(GOBJECTS): libevent.la
+endif
 
 fibers/config.scm: Makefile fibers/config.scm.in
 	mkdir -p fibers
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-CLEANFILES += fibers/config.scm
+fibers/posix-clocks.scm: Makefile fibers/posix-clocks.scm.in
+	mkdir -p fibers
+	sed -e "s|@platform\@|$(shell uname)|" \
+		$(srcdir)/fibers/posix-clocks.scm.in > fibers/posix-clocks.scm
+
+CLEANFILES += fibers/config.scm fibers/posix-clocks.scm
 
 TESTS = \
 	tests/basic.scm \

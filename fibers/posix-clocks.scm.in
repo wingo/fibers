@@ -40,7 +40,7 @@
             is-osx?
             clock-nanosleep))
 
-(define is-osx? (string=? "Darwin" "Linux"))
+(define is-osx? (string=? "Darwin" "@platform@"))
 
 (define exe (dynamic-link))
 

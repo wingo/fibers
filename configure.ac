@@ -23,25 +23,34 @@ AC_INIT([fibers], [1.0.0])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIRS([m4])
-AM_INIT_AUTOMAKE([serial-tests])
+AM_INIT_AUTOMAKE([serial-tests -Werror foreign])
 AC_COPYRIGHT(FIBERS_CONFIGURE_COPYRIGHT)
-AM_CONFIG_HEADER(config.h)
+#AM_CONFIG_HEADER(config.h)
 
-AC_DISABLE_STATIC
-
-AC_ISC_POSIX
+AM_PROG_AR
+AM_PROG_LIBTOOL
 AC_PROG_CC
-AC_STDC_HEADERS
 AC_PROG_LIBTOOL
 
-AC_CHECK_HEADERS([sys/epoll.h])
-AC_CHECK_FUNCS([epoll_create epoll_create1])
+#Check for libevent
+AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was 
+not found in libevent])])
 
 WARN_CFLAGS=-Wall
 AC_ARG_ENABLE([Werror], AC_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
         [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
 
+build_darwin=no
+
+#Detect the target system
+case "$host_os" in
+	darwin*)
+		build_darwin=yes
+		;;
+esac
+
+AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
 #
 # Check for Guile
 #

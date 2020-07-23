@@ -20,7 +20,7 @@
 (define-module (fibers scheduler)
   #:use-module (srfi srfi-9)
   #:use-module (fibers stack)
-  #:use-module (fibers epoll)
+  #:use-module (fibers libevent)
   #:use-module (fibers psq)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 control)
@@ -47,12 +47,12 @@
             yield-current-task))
 
 (define-record-type <scheduler>
-  (%make-scheduler epfd runcount-box prompt-tag
+  (%make-scheduler libevt runcount-box prompt-tag
                    next-runqueue current-runqueue
                    fd-waiters timers kernel-thread
                    remote-peers choose-parallel-scheduler)
   scheduler?
-  (epfd scheduler-epfd)
+  (libevt scheduler-libevt)
   ;; atomic variable of uint32
   (runcount-box scheduler-runcount-box)
   (prompt-tag scheduler-prompt-tag)
@@ -102,7 +102,7 @@
 (define* (make-scheduler #:key parallelism
                          (prompt-tag (make-prompt-tag "fibers")))
   "Make a new scheduler in which to run fibers."
-  (let ((epfd (epoll-create))
+  (let ((evt (libevt-create))
         (runcount-box (make-atomic-box 0))
         (next-runqueue (make-empty-stack))
         (current-runqueue (make-empty-stack))
@@ -111,7 +111,7 @@
                             (((t1 . c1) (t2 . c2)) (< t1 t2)))
                           <))
         (kernel-thread (make-atomic-parameter #f)))
-    (let* ((sched (%make-scheduler epfd runcount-box prompt-tag
+    (let* ((sched (%make-scheduler evt runcount-box prompt-tag
                                    next-runqueue current-runqueue
                                    fd-waiters timers kernel-thread
                                    #f #f))
@@ -173,8 +173,8 @@ with no arguments.
 This function is thread-safe even if @var{sched} is running on a
 remote kernel thread."
   (schedule-task/no-wakeup sched task)
-  (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
-    (epoll-wake! (scheduler-epfd sched)))
+  ; (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
+  ;   (libevt-wake! (scheduler-libevt sched)))
   (values))
 
 (define (schedule-tasks-for-active-fd fd revents sched)
@@ -185,14 +185,14 @@ remote kernel thread."
      ;; deactivated our entry in the epoll set.
      (set-car! events+waiters #f)
      (set-cdr! events+waiters '())
-     (unless (zero? (logand revents EPOLLERR))
+     (unless (zero? (logand revents EVERR))
        (hashv-remove! (scheduler-fd-waiters sched) fd))
      ;; Now resume or re-schedule waiters, as appropriate.
      (let lp ((waiters waiters))
        (match waiters
          (() #f)
          (((events . task) . waiters)
-          (if (zero? (logand revents (logior events EPOLLERR)))
+          (if (zero? (logand revents (logior events EVERR)))
               ;; Re-schedule.
               (schedule-task-when-fd-active sched fd events task)
               ;; Resume.
@@ -234,10 +234,10 @@ remote kernel thread."
     (if (stack-empty? (scheduler-next-runqueue sched))
         expiry
         0))
-  (epoll (scheduler-epfd sched)
-         #:expiry (timers-expiry (scheduler-timers sched))
-         #:update-expiry update-expiry
-         #:folder (lambda (fd revents sched)
+  (libevt (scheduler-libevt sched)
+        #:expiry (timers-expiry (scheduler-timers sched))
+        #:update-expiry update-expiry
+        #:folder (lambda (fd revents sched)
                     (schedule-tasks-for-active-fd fd revents sched)
                     sched)
          #:seed sched)
@@ -314,7 +314,7 @@ value.  Return zero values."
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."
-  (epoll-destroy (scheduler-epfd sched)))
+  (libevt-destroy (scheduler-libevt sched)))
 
 (define (schedule-task-when-fd-active sched fd events task)
   "Arrange for @var{sched} to schedule @var{task} when the file
@@ -328,8 +328,7 @@ expressed as an epoll bitfield."
                     (= (logand events active-events) events))
          (let ((active-events (logior events (or active-events 0))))
            (set-car! fd-waiters active-events)
-           (epoll-add*! (scheduler-epfd sched) fd
-                        (logior active-events EPOLLONESHOT)))))
+           (libevt-add! (scheduler-libevt sched) fd active-events))))
       (#f
        (let ((fd-waiters (list events (cons events task))))
          (define (finalize-fd fd)
@@ -346,18 +345,17 @@ expressed as an epoll bitfield."
            (set-car! fd-waiters #f))
          (hashv-set! (scheduler-fd-waiters sched) fd fd-waiters)
          (add-fdes-finalizer! fd finalize-fd)
-         (epoll-add*! (scheduler-epfd sched) fd
-                      (logior events EPOLLONESHOT)))))))
+         (libevt-add! (scheduler-libevt sched) fd events))))))
 
 (define (schedule-task-when-fd-readable sched fd task)
   "Arrange to schedule @var{task} on @var{sched} when the file
 descriptor @var{fd} becomes readable."
-  (schedule-task-when-fd-active sched fd (logior EPOLLIN EPOLLRDHUP) task))
+  (schedule-task-when-fd-active sched fd (logior EVREAD EVWRITE) task))
 
 (define (schedule-task-when-fd-writable sched fd task)
   "Arrange to schedule @var{k} on @var{sched} when the file descriptor
 @var{fd} becomes writable."
-  (schedule-task-when-fd-active sched fd EPOLLOUT task))
+  (schedule-task-when-fd-active sched fd EVWRITE task))
 
 (define (schedule-task-at-time sched expiry task)
   "Arrange to schedule @var{task} when the absolute real time is
