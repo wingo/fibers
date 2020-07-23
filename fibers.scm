@@ -24,6 +24,8 @@
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
+  #:use-module ((fibers posix-clocks) #:select (is-osx?))
+  #:use-module (fibers config)
   #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
@@ -57,6 +59,12 @@
         (lambda (v i) (bitvector-set! v i #t))))
    (guile-2 (lambda (v i) (bitvector-set! v i #t)))))
 ;; End of Guile 2 and 3 compatibility.
+
+(if is-osx?
+  (eval-when (eval load compile)
+  (dynamic-call "init_affinity"
+                (dynamic-link (extension-library "affinity"))))
+)
 
 (define (wait-for-readable port)
   (suspend-current-task
