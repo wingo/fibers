@@ -91,6 +91,7 @@ TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 EXTRA_DIST += \
 	env.in \
 	fibers/config.scm.in \
+	fibers/posix-clocks.scm.in \
 	HACKING \
         COPYING.LESSER \
 	README.md \
