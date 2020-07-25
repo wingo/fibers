@@ -1,21 +1,21 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016 Free Software Foundation, Inc.
-;;;; 
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-;;;; 
+;;;;
 
 (define-module (fibers)
   #:use-module (ice-9 match)
@@ -24,7 +24,7 @@
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
-  #:use-module ((fibers posix-clocks) #:select (is-osx?))
+  #:use-module ((fibers posix-clocks) #:select (init-posix-clocks))
   #:use-module (fibers config)
   #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
@@ -33,11 +33,7 @@
   #:export (run-fibers spawn-fiber)
   #:re-export (sleep))
 
-(if is-osx?
-  (eval-when (eval load compile)
-  (dynamic-call "init_affinity"
-                (dynamic-link (extension-library "affinity"))))
-)
+(init-posix-clocks)
 
 (define (wait-for-readable port)
   (suspend-current-task

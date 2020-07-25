@@ -33,7 +33,7 @@ AC_PROG_CC
 AC_PROG_LIBTOOL
 
 #Check for libevent
-AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was 
+AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was
 not found in libevent])])
 
 WARN_CFLAGS=-Wall
@@ -43,14 +43,22 @@ AC_SUBST(WARN_CFLAGS)
 
 build_darwin=no
 
-#Detect the target system
+# Detect the target system
 case "$host_os" in
-	darwin*)
-		build_darwin=yes
-		;;
+     linux*)
+        build_linux=yes
+        PLATFORM=linux
+        ;;
+     darwin*)
+        build_darwin=yes
+        PLATFORM=darwin
+        ;;
 esac
 
 AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
+AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
+AC_SUBST(PLATFORM)
+
 #
 # Check for Guile
 #
