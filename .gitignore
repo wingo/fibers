@@ -1,3 +1,6 @@
+/.deps
+/.libs
+build/
 /INSTALL
 /Makefile
 /Makefile.in
@@ -23,13 +26,13 @@
 /m4/ltversion.m4
 /m4/lt~obsolete.m4
 /stamp-h1
-/.deps
-/.libs
+/build-aux/ar-lib
 /build-aux/depcomp
-/epoll.la
-/epoll_la-epoll.lo
-*.go
-/fibers.info
 /build-aux/texinfo.tex
+/fibers.info
 /fibers/config.scm
-build/
+/fibers/posix-clocks.scm
+*.la
+*.lo
+*.go
+*.o
