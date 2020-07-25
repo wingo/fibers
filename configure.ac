@@ -1,21 +1,16 @@
 define(FIBERS_CONFIGURE_COPYRIGHT,[[
-
 Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
-
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
-
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 Lesser General Public License for more details.
-
 You should have received a copy of the GNU Lesser General Public
 License along with this program.  If not, see
 <http://www.gnu.org/licenses/>.
-
 ]])
 
 AC_PREREQ(2.52)
@@ -33,7 +28,7 @@ AC_PROG_CC
 AC_PROG_LIBTOOL
 
 #Check for libevent
-AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was 
+AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was
 not found in libevent])])
 
 WARN_CFLAGS=-Wall
@@ -43,14 +38,22 @@ AC_SUBST(WARN_CFLAGS)
 
 build_darwin=no
 
-#Detect the target system
+# Detect the target system
 case "$host_os" in
-	darwin*)
-		build_darwin=yes
-		;;
+     linux*)
+        build_linux=yes
+        PLATFORM=linux
+        ;;
+     darwin*)
+        build_darwin=yes
+        PLATFORM=darwin
+        ;;
 esac
 
 AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
+AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
+AC_SUBST(PLATFORM)
+
 #
 # Check for Guile
 #

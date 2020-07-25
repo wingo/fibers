@@ -24,7 +24,7 @@
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
-  #:use-module ((fibers posix-clocks) #:select (is-osx?))
+  #:use-module (fibers posix-clocks)
   #:use-module (fibers config)
   #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
@@ -32,12 +32,6 @@
   #:use-module (ice-9 suspendable-ports)
   #:export (run-fibers spawn-fiber)
   #:re-export (sleep))
-
-(if is-osx?
-  (eval-when (eval load compile)
-  (dynamic-call "init_affinity"
-                (dynamic-link (extension-library "affinity"))))
-)
 
 (define (wait-for-readable port)
   (suspend-current-task
