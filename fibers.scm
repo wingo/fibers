@@ -96,7 +96,7 @@
                     (make-bitvector (bitvector-length group-affinity) #f)))
                (bitvector-set! affinity cpu #t)
                (cons affinity (lp (1+ cpu))))))))
-  (let ((cpu-count (bit-count #t group-affinity)))
+  (let ((cpu-count (bitvector-count group-affinity)))
     (if (eq? parallelism cpu-count)
         (one-thread-per-cpu)
         (each-thread-has-group-affinity))))
