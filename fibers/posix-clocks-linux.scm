@@ -49,6 +49,12 @@
 (define init-posix-clocks
   (lambda () *unspecified*))
 
+(define pthread-self
+  (let* ((ptr (dynamic-pointer "pthread_self" exe))
+         (proc (pointer->procedure pthread-t ptr '())))
+    (lambda ()
+      (proc))))
+
 (define clock-getcpuclockid
   (let* ((ptr (dynamic-pointer "clock_getcpuclockid" exe))
          (proc (pointer->procedure int ptr (list pid-t '*)
