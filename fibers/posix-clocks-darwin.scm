@@ -27,7 +27,8 @@
             clock-nanosleep
             clock-getcpuclockid
             pthread-getcpuclockid
-            pthread-self))
+            pthread-self
+            getaffinity setaffinity))
 
 (define exe (dynamic-link))
 
