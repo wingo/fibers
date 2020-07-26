@@ -28,7 +28,7 @@ CPU_SET(int num, cpu_set_t *cs) { cs->count |= (1 << num); }
 static inline int
 CPU_ISSET(int num, cpu_set_t *cs) { return (cs->count & (1 << num)); }
 
-int sched_getaffinity(pid_t pid, size_t cpu_size, cpu_set_t *cpu_set)
+int sched_getaffinity(size_t cpu_size, cpu_set_t *cpu_set)
 {
     int32_t core_count = 0;
     size_t len = sizeof(core_count);
@@ -46,10 +46,12 @@ int sched_getaffinity(pid_t pid, size_t cpu_size, cpu_set_t *cpu_set)
     return 0;
 }
 
-int pthread_setaffinity_np(pthread_t thread, size_t cpu_size ,cpu_set_t *cpu_set)
+int pthread_setaffinity_np(size_t cpu_size ,cpu_set_t *cpu_set)
 {
     thread_port_t mach_thread;
     int core = 0;
+
+    pthread_t thread = pthread_self();
 
     for(core = 0; core < 8 * cpu_size; core++) {
         if(CPU_ISSET(core, cpu_set)) break;
@@ -62,13 +64,16 @@ int pthread_setaffinity_np(pthread_t thread, size_t cpu_size ,cpu_set_t *cpu_set
     return 0;
 }
 
+// We are currently only interested in the current thread, so we are ignoring
+// the id (since currently we are always passing 0, which means the running
+// thread).
 static SCM scm_primitive_getaffinity(SCM id)
 {
-    pid_t pid = scm_to_int(id);
     cpu_set_t cs;
     CPU_ZERO(&cs);
     size_t cpu_size = sizeof(cs);
-    sched_getaffinity(pid, cpu_size, &cs);
+
+    sched_getaffinity(cpu_size, &cs);
 
     SCM bv = scm_c_make_bitvector(cpu_size, scm_from_int(0));
 
@@ -81,9 +86,11 @@ static SCM scm_primitive_getaffinity(SCM id)
     return bv;
 }
 
+// We are currently only interested in the current thread, so we are ignoring
+// the id (since currently we are always passing 0, which means the running
+// thread).
 static SCM scm_primitive_set_affinity(SCM id, SCM mask)
 {
-    pid_t pid = scm_to_int(id);
     cpu_set_t cs;
     CPU_ZERO(&cs);
 
@@ -93,7 +100,7 @@ static SCM scm_primitive_set_affinity(SCM id, SCM mask)
         CPU_SET(num, &cs);
     }
 
-    int ret = pthread_setaffinity_np(pid, sizeof(cpu_set_t), &cs);
+    int ret = pthread_setaffinity_np(sizeof(cpu_set_t), &cs);
     if(ret){
         printf("Error setting affinity\n");
     }
