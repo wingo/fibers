@@ -138,7 +138,7 @@
       (destroy-scheduler scheduler)
       (apply values (atomic-box-ref ret))))))
 
-(define* (spawn-fiber thunk #:optional sched #:key parallel?)
+(define* (spawn-fiber thunk #:optional scheduler #:key parallel?)
   "Spawn a new fiber which will start by invoking @var{thunk}.
 The fiber will be scheduled on the next turn.  @var{thunk} will run
 with a copy of the current dynamic state, isolating fluid and
@@ -151,12 +151,12 @@ parameter mutations to the fiber."
     (schedule-task sched
                    (capture-dynamic-state thunk)))
   (cond
-   (sched
+   (scheduler
     ;; When a scheduler is passed explicitly, it could be there is no
     ;; current fiber; in that case the dynamic state probably doesn't
     ;; have the right right current-read-waiter /
     ;; current-write-waiter, so wrap the thunk.
-    (create-fiber sched
+    (create-fiber scheduler
                   (lambda ()
                     (current-read-waiter wait-for-readable)
                     (current-write-waiter wait-for-writable)
