@@ -74,12 +74,11 @@ static SCM scm_primitive_getaffinity(SCM id)
 
     for(int core = 0; core < cpu_size; core++){
         if(CPU_ISSET(core, &cs)) {
-            scm_c_bitvector_set_x(bv, core, scm_from_int(core));
+            scm_c_bitvector_set_bit_x(bv, core);
         }
     }
 
     return bv;
-    
 }
 
 static SCM scm_primitive_set_affinity(SCM id, SCM mask)
@@ -90,7 +89,7 @@ static SCM scm_primitive_set_affinity(SCM id, SCM mask)
 
     int num;
     for(size_t i = 0; i < scm_c_bitvector_length(mask); i++) {
-        num = scm_c_bitvector_ref(mask, i);
+        num = scm_c_bitvector_bit_is_set(mask, i);
         CPU_SET(num, &cs);
     }
 
@@ -100,13 +99,12 @@ static SCM scm_primitive_set_affinity(SCM id, SCM mask)
     }
 
     return SCM_UNSPECIFIED;
-
 }
 
 void init_affinity(void) {
     scm_c_define_gsubr("getaffinity", 1, 0, 0,
                        scm_primitive_getaffinity);
 
-    scm_c_define_gsubr("setaffinity", 2, 0, 0, 
+    scm_c_define_gsubr("setaffinity", 2, 0, 0,
                         scm_primitive_set_affinity);
 }
