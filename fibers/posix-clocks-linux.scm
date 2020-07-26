@@ -36,6 +36,7 @@
 (define time-t long)
 (define pid-t int)
 (define pthread-t unsigned-long)
+(define struct-timespec (list time-t long))
 
 (define TIMER_ABSTIME 1)
 
@@ -76,6 +77,15 @@
           (unless (zero? ret) (error (strerror errno)))
           (bytevector-s32-native-ref buf 0))))))
 
+(define (nsec->timespec nsec)
+  (make-c-struct struct-timespec
+                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
+
+(define (timespec->nsec ts)
+  (match (parse-c-struct ts struct-timespec)
+    ((sec nsec)
+     (+ (* sec #e1e9) nsec))))
+
 (define clock-nanosleep
   (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))
          (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
@@ -86,3 +96,53 @@
          ((zero? ret) (values #t 0))
          ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
          (else (error (strerror ret))))))))
+
+(define clock-gettime
+  (let* ((ptr (dynamic-pointer "clock_gettime" exe))
+         (proc (pointer->procedure int ptr (list clockid-t '*)
+                                   #:return-errno? #t)))
+    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
+      (call-with-values (lambda () (proc clockid buf))
+        (lambda (ret errno)
+          (unless (zero? ret) (error (strerror errno)))
+          (timespec->nsec buf))))))
+
+;; Quick little test to determine the resolution of clock-nanosleep on
+;; different clock types, and how much CPU that takes.  Results on
+;; this 2-core, 2-thread-per-core skylake laptop:
+;;
+;; Clock type     | Applied Hz | Actual Hz | CPU time overhead (%)
+;; ---------------------------------------------------------------
+;; MONOTONIC        100          98           0.4
+;; MONOTONIC        1000         873          4.4
+;; MONOTONIC        10000        6242         6.4
+;; MONOTONIC        100000       14479       13.6
+;; REALTIME         100          98           0.5
+;; REALTIME         1000         872          4.5
+;; REALTIME         10000        6238         6.5
+;; REALTIME         100000       14590       12.2
+;; PROCESS_CPUTIME  100          84           1.0
+;; PROCESS_CPUTIME  10000        250          1.0
+;; PROCESS_CPUTIME  100000       250          1.0
+;; pthread cputime  100          84           0.9
+;; pthread cputime  10000        250          0.6
+;;
+;; The cputime benchmarks were run with a background thread in a busy
+;; loop to allow that clock to advance at the same rate as a wall
+;; clock.
+;;
+;; Conclusions: The monotonic and realtime clocks are relatively
+;; high-precision, allowing for sub-millisecond scheduling quanta, but
+;; they have to be actively managed (explicitly deactivated while
+;; waiting on FD events).  The cputime clocks don't have to be
+;; actively managed, but they aren't as high-precision either.
+(define (test clock period)
+  (let ((start (clock-gettime CLOCK_PROCESS_CPUTIME_ID))
+        (until (+ (clock-gettime clock) #e1e9)))
+    (let lp ((n 0))
+      (if (< (clock-gettime clock) until)
+          (begin
+            (clock-nanosleep clock period)
+            (lp (1+ n)))
+          (values n (/ (- (clock-gettime CLOCK_PROCESS_CPUTIME_ID) start)
+                       1e9))))))
