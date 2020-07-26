@@ -24,7 +24,7 @@
   #:use-module (fibers repl)
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
-  #:use-module ((fibers posix-clocks) #:select (init-posix-clocks))
+  #:use-module (fibers posix-clocks)
   #:use-module (fibers config)
   #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
