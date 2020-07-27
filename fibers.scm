@@ -139,7 +139,7 @@
              (%run-fibers scheduler hz finished? affinity))
            (lambda ()
              (stop-auxiliary-threads scheduler)))))
-      (cleanup-scheduler scheduler)
+      (destroy-scheduler scheduler)
       (apply values (atomic-box-ref ret))))))
 
 (define* (spawn-fiber thunk #:optional sched #:key parallel?)
