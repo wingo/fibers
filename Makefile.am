@@ -73,7 +73,7 @@ fibers/config.scm: Makefile fibers/config.scm.in
 
 fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
 	mkdir -p fibers
-	cat $(srcdir)/fibers/posix-clocks-$(PLATFORM).scm >> fibers/posix-clocks.scm
+	cat $(srcdir)/fibers/posix-clocks-$(PLATFORM).scm > fibers/posix-clocks.scm
 
 CLEANFILES += fibers/config.scm fibers/posix-clocks.scm
 

@@ -1,5 +1,6 @@
 ;; POSIX clocks (Darwin)
 
+;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
@@ -23,15 +24,12 @@
   #:use-module (fibers config)
   #:use-module (ice-9 match)
   #:use-module (system foreign)
-  #:export (clock-nanosleep
+  #:export (init-posix-clocks
+            clock-nanosleep
             clock-getcpuclockid
             pthread-getcpuclockid
             pthread-self
             getaffinity setaffinity))
-
-(eval-when (eval load compile)
-  (dynamic-call "init_affinity"
-                (dynamic-link (extension-library "affinity"))))
 
 (define exe (dynamic-link))
 
@@ -44,13 +42,11 @@
 (define CLOCK_PROCESS_CPUTIME_ID 12)
 (define CLOCK_THREAD_CPUTIME_ID 16)
 
-(define (nsec->timespec nsec)
-  (make-c-struct struct-timespec
-                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
-(define (timespec->nsec ts)
-  (match (parse-c-struct ts struct-timespec)
-    ((sec nsec)
-     (+ (* sec #e1e9) nsec))))
+(define init-posix-clocks
+  (lambda ()
+    (eval-when (eval load compile)
+      (dynamic-call "init_affinity"
+                    (dynamic-link (extension-library "affinity"))))))
 
 (define clock-getcpuclockid
   (lambda* (pid) CLOCK_PROCESS_CPUTIME_ID))
@@ -63,6 +59,15 @@
          (proc (pointer->procedure pthread-t ptr '())))
     (lambda ()
       (proc))))
+
+(define (nsec->timespec nsec)
+  (make-c-struct struct-timespec
+                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
+
+(define (timespec->nsec ts)
+  (match (parse-c-struct ts struct-timespec)
+    ((sec nsec)
+     (+ (* sec #e1e9) nsec))))
 
 (define clock-nanosleep
   (let* ((ptr (dynamic-pointer "nanosleep" exe))

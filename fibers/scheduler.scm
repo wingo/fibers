@@ -36,7 +36,7 @@
             scheduler-work-pending?
             choose-parallel-scheduler
             run-scheduler
-            cleanup-scheduler
+            destroy-scheduler
 
             schedule-task
             schedule-task-when-fd-readable
@@ -312,9 +312,13 @@ value.  Return zero values."
                                 key args)))))))
     (with-scheduler sched (run-scheduler/error-handling))))
 
+(define (cleanup-scheduler sched)
+  (libevt-destroy (scheduler-libevt sched)))
+
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."
-  (libevt-destroy (scheduler-libevt sched)))
+  (for-each cleanup-scheduler (scheduler-remote-peers sched))
+  (cleanup-scheduler sched))
 
 (define (schedule-task-when-fd-active sched fd events task)
   "Arrange for @var{sched} to schedule @var{task} when the file
@@ -394,8 +398,3 @@ suspending if the current continuation isn't suspendable.  Returns
             (begin
               (abort-to-prompt tag schedule-task)
               #t))))))
-
-(define (cleanup-scheduler sched)
-  (for-each destroy-scheduler (scheduler-remote-peers sched))
-  (destroy-scheduler sched)
-)
