@@ -487,7 +487,8 @@ For example:
 
 (run-fibers
  (lambda ()
-   (spawn-fiber (lambda () (display "hey!\n")))))
+   (spawn-fiber (lambda () (display "hey!\n"))))
+ #:drain? #t)
 @print{} hey!
 @end example
 
