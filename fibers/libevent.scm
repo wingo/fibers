@@ -76,7 +76,8 @@
 
 (define* (libevt libevt #:key (expiry #f)
                  (update-expiry (lambda (expiry) expiry))
-                 (folder libevt-default-folder) (seed '()))
+                 (folder libevt-default-folder)
+                 (seed '()))
   (define (expiry->timeout expiry)
     (cond
      ((not expiry) -1)
