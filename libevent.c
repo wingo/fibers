@@ -34,7 +34,7 @@ struct event_data
 struct wait_data
 {
   int rv;
-  SCM events;
+  struct event_data *events;
   int maxevents;
 };
 
@@ -59,7 +59,7 @@ void cb_func (evutil_socket_t fd, short what, void *arg)
   ev_data.fd = fd;
   ev_data.event = what;
   int sz = sizeof (struct event_data);
-  memcpy (data->events + (rv*sz), &ev_data, sz);
+  memcpy (data->events + (rv * sz), &ev_data, sz);
 
   data->rv += 1;
 }
@@ -97,8 +97,8 @@ scm_primitive_create_event_base (SCM eventsv)
   data = (struct wait_data *) scm_gc_malloc (sizeof (struct wait_data),
                                              "wait_data");
   data->rv = 0;
-  data->events = eventsv;
-  data->maxevents = scm_to_int (scm_bytevector_length (eventsv));
+  data->events = (struct event_data *) SCM_BYTEVECTOR_CONTENTS (eventsv);
+  data->maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (struct event_data);
 
   return scm_list_2 (scm_from_pointer (base, free_evb),
                      scm_from_pointer (data, NULL));
@@ -114,13 +114,15 @@ scm_primitive_add_event (SCM lst, SCM fd, SCM ev)
   struct event_base *base;
   struct wait_data *data;
 
-  c_fd = scm_to_int(fd);
-  c_ev = scm_to_short(ev);
+  c_fd = scm_to_int (fd);
+  c_ev = scm_to_short (ev);
 
-  base = (struct event_base *) scm_to_pointer(scm_list_ref(lst, scm_from_int(0)));
-  data = (struct wait_data *) scm_to_pointer(scm_list_ref(lst, scm_from_int(1)));
+  base =
+    (struct event_base *) scm_to_pointer (scm_list_ref (lst, scm_from_int (0)));
+  data =
+    (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
 
-  event_base_once(base, c_fd, c_ev, cb_func, data, NULL);
+  event_base_once (base, c_fd, c_ev, cb_func, data, NULL);
 
   return SCM_UNSPECIFIED;
 }
@@ -131,18 +133,19 @@ static uint64_t time_units_per_microsec;
 
 static void run_event_loop (struct event_base *base, struct timeval *tv)
 {
-  if(tv != NULL)
+  if (tv != NULL)
     {
       event_base_loopexit (base, tv);
     }
 
-  event_base_dispatch(base);
+  event_base_dispatch (base);
 }
 
 static SCM
 scm_primitive_event_loop (SCM lst, SCM timeout)
 #define FUNC_NAME "primitive-event-loop"
 {
+  int result = 0;
   int microsec = 0;
   int64_t c_timeout;
   struct timeval tv;
@@ -163,7 +166,7 @@ scm_primitive_event_loop (SCM lst, SCM timeout)
   struct wait_data *data =
     (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
 
-  if(data == NULL)
+  if (data == NULL)
     {
       scm_wrong_type_arg_msg ("event-loop", 1,
                               scm_list_ref (lst, scm_from_int (1)),
@@ -179,7 +182,13 @@ scm_primitive_event_loop (SCM lst, SCM timeout)
       run_event_loop (base, NULL);
     }
 
-  return scm_from_int (data->rv);
+  // Number of events triggered.
+  result = data->rv;
+
+  // Reset for next run loop.
+  data->rv = 0;
+
+  return scm_from_int (result);
 }
 
 #undef FUNC_NAME
@@ -197,12 +206,12 @@ void init_libevt (void)
   scm_c_define_gsubr ("primitive-event-loop", 2, 0, 0,
                       scm_primitive_event_loop);
 
-  scm_c_define("%sizeof-struct-event",
-               scm_from_size_t (sizeof (struct event_data)));
-  scm_c_define("%offsetof-struct-event-ev",
-               scm_from_size_t(offsetof (struct event_data, event)));
-  scm_c_define("EVREAD", scm_from_int(EV_READ));
-  scm_c_define("EVWRITE", scm_from_int(EV_WRITE));
+  scm_c_define ("%sizeof-struct-event",
+                scm_from_size_t (sizeof (struct event_data)));
+  scm_c_define ("%offsetof-struct-event-ev",
+                scm_from_size_t (offsetof (struct event_data, event)));
+  scm_c_define ("EVREAD", scm_from_int (EV_READ));
+  scm_c_define ("EVWRITE", scm_from_int (EV_WRITE));
 }
 
 /*
