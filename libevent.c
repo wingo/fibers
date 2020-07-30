@@ -34,7 +34,7 @@ struct event_data
 struct wait_data
 {
   int rv;
-  SCM events;
+  struct event_data *events;
   int maxevents;
 };
 
@@ -97,7 +97,7 @@ scm_primitive_create_event_base (SCM eventsv)
   data = (struct wait_data *) scm_gc_malloc (sizeof (struct wait_data),
                                              "wait_data");
   data->rv = 0;
-  data->events = eventsv;
+  data->events = (struct event_data *) SCM_BYTEVECTOR_CONTENTS (eventsv);
   data->maxevents = scm_to_int (scm_bytevector_length (eventsv));
 
   return scm_list_2 (scm_from_pointer (base, free_evb),
