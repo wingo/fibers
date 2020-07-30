@@ -98,7 +98,7 @@ scm_primitive_create_event_base (SCM eventsv)
                                              "wait_data");
   data->rv = 0;
   data->events = (struct event_data *) SCM_BYTEVECTOR_CONTENTS (eventsv);
-  data->maxevents = scm_to_int (scm_bytevector_length (eventsv));
+  data->maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (struct event_data);
 
   return scm_list_2 (scm_from_pointer (base, free_evb),
                      scm_from_pointer (data, NULL));
@@ -114,13 +114,15 @@ scm_primitive_add_event (SCM lst, SCM fd, SCM ev)
   struct event_base *base;
   struct wait_data *data;
 
-  c_fd = scm_to_int(fd);
-  c_ev = scm_to_short(ev);
+  c_fd = scm_to_int (fd);
+  c_ev = scm_to_short (ev);
 
-  base = (struct event_base *) scm_to_pointer(scm_list_ref(lst, scm_from_int(0)));
-  data = (struct wait_data *) scm_to_pointer(scm_list_ref(lst, scm_from_int(1)));
+  base =
+    (struct event_base *) scm_to_pointer (scm_list_ref (lst, scm_from_int (0)));
+  data =
+    (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
 
-  event_base_once(base, c_fd, c_ev, cb_func, data, NULL);
+  event_base_once (base, c_fd, c_ev, cb_func, data, NULL);
 
   return SCM_UNSPECIFIED;
 }
