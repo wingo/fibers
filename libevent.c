@@ -145,6 +145,7 @@ static SCM
 scm_primitive_event_loop (SCM lst, SCM timeout)
 #define FUNC_NAME "primitive-event-loop"
 {
+  int result = 0;
   int microsec = 0;
   int64_t c_timeout;
   struct timeval tv;
@@ -181,7 +182,13 @@ scm_primitive_event_loop (SCM lst, SCM timeout)
       run_event_loop (base, NULL);
     }
 
-  return scm_from_int (data->rv);
+  // Number of events triggered.
+  result = data->rv;
+
+  // Reset for next run loop.
+  data->rv = 0;
+
+  return scm_from_int (result);
 }
 
 #undef FUNC_NAME
