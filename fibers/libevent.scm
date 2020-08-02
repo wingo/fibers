@@ -17,7 +17,7 @@
 
 (eval-when (eval load compile)
   (dynamic-call "init_libevt"
-                (dynamic-link (extension-library "libevent"))))
+                (dynamic-link (extension-library "fibers-libevent"))))
 
 
 (when (defined? 'EVREAD)
