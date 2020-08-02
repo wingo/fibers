@@ -32,13 +32,17 @@
             getaffinity setaffinity))
 
 (define exe (dynamic-link))
+(define exe-clocks (dynamic-link (extension-library "fibers-darwin-clocks")))
 
+(define clockid-t int32)
 (define time-t long)
 (define pthread-t unsigned-long)
 (define struct-timespec (list time-t long))
 
 (define TIMER_ABSTIME 1)
 
+(define CLOCK_REALTIME 0)
+(define CLOCK_MONOTONIC 6)
 (define CLOCK_PROCESS_CPUTIME_ID 12)
 (define CLOCK_THREAD_CPUTIME_ID 16)
 
@@ -70,12 +74,22 @@
      (+ (* sec #e1e9) nsec))))
 
 (define clock-nanosleep
-  (let* ((ptr (dynamic-pointer "nanosleep" exe))
-         (proc (pointer->procedure int ptr (list '* '*))))
+  (let* ((ptr (dynamic-pointer "clock_nanosleep" exe-clocks))
+         (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
     (lambda* (clockid nsec #:key absolute? (buf (nsec->timespec nsec)))
       (let* ((flags (if absolute? TIMER_ABSTIME 0))
-             (ret (proc buf buf)))
+             (ret (proc clockid flags buf buf)))
         (cond
          ((zero? ret) (values #t 0))
          ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
          (else (error (strerror ret))))))))
+
+(define clock-gettime
+  (let* ((ptr (dynamic-pointer "clock_gettime" exe))
+         (proc (pointer->procedure int ptr (list clockid-t '*)
+                                   #:return-errno? #t)))
+    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
+      (call-with-values (lambda () (proc clockid buf))
+        (lambda (ret errno)
+          (unless (zero? ret) (error (strerror errno)))
+          (timespec->nsec buf))))))

@@ -58,6 +58,11 @@ extlib_LTLIBRARIES += fibers-affinity.la
 fibers_affinity_la_SOURCES = affinity.c
 fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
+
+extlib_LTLIBRARIES += fibers-darwin-clocks.la
+fibers_darwin_clocks_la_SOURCES = clock_nanosleep.c
+fibers_darwin_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_darwin_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
 
 fibers/config.scm: Makefile fibers/config.scm.in
