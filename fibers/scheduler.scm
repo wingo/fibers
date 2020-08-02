@@ -298,7 +298,7 @@ value.  Return zero values."
     (define (run-scheduler/error-handling)
       (catch #t
         next-task
-        (lambda args  (apply throw args))
+        (lambda _ (run-scheduler/error-handling))
         (let ((err (current-error-port)))
           (lambda (key . args)
             (false-if-exception
