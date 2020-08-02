@@ -46,7 +46,7 @@
   (lambda ()
     (eval-when (eval load compile)
       (dynamic-call "init_affinity"
-                    (dynamic-link (extension-library "affinity"))))))
+                    (dynamic-link (extension-library "fibers-affinity"))))))
 
 (define clock-getcpuclockid
   (lambda* (pid) CLOCK_PROCESS_CPUTIME_ID))
