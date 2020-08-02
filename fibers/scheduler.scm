@@ -173,8 +173,8 @@ with no arguments.
 This function is thread-safe even if @var{sched} is running on a
 remote kernel thread."
   (schedule-task/no-wakeup sched task)
-  ;; (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
-  ;;   (libevt-wake! (scheduler-libevt sched)))
+  (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
+    (libevt-wake! (scheduler-libevt sched)))
   (values))
 
 (define (schedule-tasks-for-active-fd fd revents sched)
