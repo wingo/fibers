@@ -18,23 +18,18 @@ License along with this program.  If not, see
 
 ]])
 
-AC_PREREQ(2.52)
-AC_INIT([fibers], [1.1.1])
+AC_PREREQ([2.71])
+AC_INIT([fibers],[1.1.1])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIRS([m4])
 AM_INIT_AUTOMAKE([serial-tests -Werror foreign])
 AC_COPYRIGHT(FIBERS_CONFIGURE_COPYRIGHT)
-#AM_CONFIG_HEADER(config.h)
+AC_CONFIG_HEADERS([config.h])
 
-AM_PROG_AR
-AM_PROG_LIBTOOL
 AC_PROG_CC
-AC_PROG_LIBTOOL
 
-#Check for libevent
-AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was
-not found in libevent])])
+LT_INIT([disable-static])
 
 AM_CONDITIONAL([CROSS_COMPILING], [test "x$cross_compiling" = "xyes"])
 
@@ -46,7 +41,7 @@ fi
 AC_SUBST([GUILE_TARGET])
 
 WARN_CFLAGS=-Wall
-AC_ARG_ENABLE([Werror], AC_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
+AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
         [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
 
@@ -67,6 +62,11 @@ esac
 AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
 AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
 AC_SUBST(PLATFORM)
+
+#
+# Dependencies
+#
+PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0])
 
 #
 # Check for Guile
