@@ -62,9 +62,9 @@
        #`(+ (* n #,%sizeof-struct-event)
             #,%offsetof-struct-event-ev)))))
 
-(define libevent-guardian (make-guardian))
+(define libevt-guardian (make-guardian))
 (define (pump-libevt-guardian)
-  (let ((libevt (libevent-guardian)))
+  (let ((libevt (libevt-guardian)))
     (when libevt
       (libevt-destroy libevt)
       (pump-libevt-guardian))))
@@ -77,7 +77,7 @@
              (eventsv (make-bytevector (fd-offset (or maxevents 8))))
              (libevt (make-libevt (primitive-create-event-base eventsv)
                                   eventsv maxevents state read-pipe write-pipe)))
-        (libevent-guardian libevt)
+        (libevt-guardian libevt)
         (libevt-add! libevt (fileno read-pipe) (logior EVREAD EVPERSIST))
         libevt))))
 
