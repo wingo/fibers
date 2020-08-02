@@ -353,7 +353,7 @@ expressed as an epoll bitfield."
 (define (schedule-task-when-fd-readable sched fd task)
   "Arrange to schedule @var{task} on @var{sched} when the file
 descriptor @var{fd} becomes readable."
-  (schedule-task-when-fd-active sched fd (logior EVREAD EVWRITE) task))
+  (schedule-task-when-fd-active sched fd EVREAD task))
 
 (define (schedule-task-when-fd-writable sched fd task)
   "Arrange to schedule @var{k} on @var{sched} when the file descriptor
