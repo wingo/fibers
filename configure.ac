@@ -28,13 +28,9 @@ AC_COPYRIGHT(FIBERS_CONFIGURE_COPYRIGHT)
 #AM_CONFIG_HEADER(config.h)
 
 AM_PROG_AR
-AM_PROG_LIBTOOL
 AC_PROG_CC
-AC_PROG_LIBTOOL
 
-#Check for libevent
-AC_CHECK_LIB([event], [event_base_new], [], [AC_MSG_ERROR([event_base_new was
-not found in libevent])])
+LT_INIT([disable-static])
 
 WARN_CFLAGS=-Wall
 AC_ARG_ENABLE([Werror], AC_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
@@ -58,6 +54,11 @@ esac
 AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
 AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
 AC_SUBST(PLATFORM)
+
+#
+# Dependencies
+#
+PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0])
 
 #
 # Check for Guile
