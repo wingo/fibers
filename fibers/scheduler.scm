@@ -173,8 +173,8 @@ with no arguments.
 This function is thread-safe even if @var{sched} is running on a
 remote kernel thread."
   (schedule-task/no-wakeup sched task)
-  ;; (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
-  ;;   (libevt-wake! (scheduler-libevt sched)))
+  (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
+    (libevt-wake! (scheduler-libevt sched)))
   (values))
 
 (define (schedule-tasks-for-active-fd fd revents sched)
@@ -298,7 +298,7 @@ value.  Return zero values."
     (define (run-scheduler/error-handling)
       (catch #t
         next-task
-        (lambda args  (apply throw args))
+        (lambda _ (run-scheduler/error-handling))
         (let ((err (current-error-port)))
           (lambda (key . args)
             (false-if-exception
@@ -354,7 +354,7 @@ expressed as an epoll bitfield."
 (define (schedule-task-when-fd-readable sched fd task)
   "Arrange to schedule @var{task} on @var{sched} when the file
 descriptor @var{fd} becomes readable."
-  (schedule-task-when-fd-active sched fd (logior EVREAD EVWRITE) task))
+  (schedule-task-when-fd-active sched fd EVREAD task))
 
 (define (schedule-task-when-fd-writable sched fd task)
   "Arrange to schedule @var{k} on @var{sched} when the file descriptor
