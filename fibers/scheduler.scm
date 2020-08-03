@@ -338,12 +338,16 @@ expressed as an epoll bitfield."
            ;; don't resume stale tasks.  Note that we don't need to
            ;; remove the FD from the epoll set, as the kernel manages
            ;; that for us.
-           ;;
-           ;; FIXME: Is there a way to wake all tasks in a thread-safe
-           ;; way?  Note that this function may be invoked from a
-           ;; finalizer thread.
-           (set-cdr! fd-waiters '())
-           (set-car! fd-waiters #f))
+           (schedule-task
+            sched
+            (lambda ()
+              (hashv-set! (scheduler-fd-waiters sched) fd #f)
+              (let lp ((waiters (cdr fd-waiters)))
+                (match waiters
+                  (() #f)
+                  (((events . task) . waiters)
+                   (schedule-task sched task)
+                   (lp waiters)))))))
          (hashv-set! (scheduler-fd-waiters sched) fd fd-waiters)
          (add-fdes-finalizer! fd finalize-fd)
          (epoll-add*! (scheduler-epfd sched) fd
