@@ -260,9 +260,10 @@ any pending timeouts."
             (stack-empty? (scheduler-current-runqueue sched))
             (stack-empty? (scheduler-next-runqueue sched)))))
 
-(define* (run-scheduler sched finished?)
+(define* (run-scheduler sched finished? #:optional (steal-work? #t))
   "Run @var{sched} until calling @code{finished?} returns a true
-value.  Return zero values."
+value.  If @code{steal-work?} is true, enable work stealing from
+remote peers. Return zero values."
   (let ((tag (scheduler-prompt-tag sched))
         (runcount-box (scheduler-runcount-box sched))
         (next (scheduler-next-runqueue sched))
@@ -278,7 +279,7 @@ value.  Return zero values."
     (define (next-task)
       (match (stack-pop! cur #f)
         (#f
-         (when (stack-empty? next)
+         (when (and steal-work? (stack-empty? next))
            ;; Both current and next runqueues are empty; steal a
            ;; little bit of work from a remote scheduler if we
            ;; can.  Run it directly instead of pushing onto a
