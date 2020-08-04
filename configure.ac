@@ -1,5 +1,7 @@
 define(FIBERS_CONFIGURE_COPYRIGHT,[[
 
+Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 
 This program is free software: you can redistribute it and/or modify

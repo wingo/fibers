@@ -1,4 +1,6 @@
 /* Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+ * Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+ * Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
