@@ -33,6 +33,7 @@ SOURCES = \
 	fibers/deque.scm \
 	fibers/epoll.scm \
 	fibers/interrupts.scm \
+	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
 	fibers/posix-clocks.scm \
@@ -67,6 +68,7 @@ TESTS = \
 	tests/conditions.scm \
 	tests/channels.scm \
 	tests/foreign.scm \
+	tests/io-wakeup.scm \
 	tests/parameters.scm \
 	tests/preemption.scm \
 	tests/speedup.scm
