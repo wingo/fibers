@@ -43,6 +43,8 @@
             get-message))
 
 (define-record-type <channel>
+  ;; R15: Both getq and putq have a gc-counter, that could be factored
+  ;; inside (fibers deque).
   (%make-channel getq getq-gc-counter putq putq-gc-counter)
   channel?
   ;; atomic box of deque
@@ -67,9 +69,16 @@ with a receiver fiber to send @var{message} over @var{channel}."
      (define (try-fn)
        ;; Try to find and perform a pending get operation.  If that
        ;; works, return a result thunk, or otherwise #f.
+
+       ;; R16: Instead, I atomically swap the queue with the empty
+       ;; list (in a loop).
        (let try ((getq (atomic-box-ref getq-box)))
          (call-with-values (lambda () (dequeue getq))
            (lambda (getq* item)
+             ;; R17: With untangle, in the case of a high contention
+             ;; channel, there is little chance maybe-commit will
+             ;; succeed (the queue is a list). So, instead I (will)
+             ;; rely only on the queue gc.
              (define (maybe-commit)
                ;; Try to update getq.  Return the new getq value in
                ;; any case.
@@ -94,6 +103,8 @@ with a receiver fiber to send @var{message} over @var{channel}."
                           ;; Continue directly.
                           (lambda () (values)))
                          ;; Get operation temporarily busy; try again.
+                         ;; R18: spin may turn into an infinite loop
+                         ;; even if in practice it is never the case.
                          ('C (spin))
                          ;; Get operation already performed; pop it
                          ;; off the getq (if we can) and try again.
@@ -112,6 +123,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
        ;; First, publish this put operation.
        (enqueue! putq-box (vector put-flag resume-put message))
        ;; Next, possibly clear off any garbage from queue.
+       ;; R19: that may be a deque procedure.
        (when (= (counter-decrement! putq-gc-counter) 0)
          (dequeue-filter! putq-box
                           (match-lambda
@@ -141,6 +153,8 @@ with a receiver fiber to send @var{message} over @var{channel}."
              (when getq*
                (match item
                  (#(get-flag resume-get)
+                  ;; R21: I am wondering how that waiting, claimed,
+                  ;; synched algorithm relates to two-phase locking.
                   (match (atomic-box-ref get-flag)
                     ('S
                      ;; This get operation has already synchronized;
@@ -162,6 +176,10 @@ with a receiver fiber to send @var{message} over @var{channel}."
                              (maybe-commit)
                              (resume-get (lambda () message))
                              (resume-put values)
+                             ;; R20: I do not understand the point of
+                             ;; values, except producing an undefined
+                             ;; value. IIRC block-fn returned value is
+                             ;; never itself a return of the caller.
                              (values))
                             ('C
                              ;; Other fiber trying to do the same
@@ -181,6 +199,7 @@ with a receiver fiber to send @var{message} over @var{channel}."
                           ;; mean that some other fiber completed our
                           ;; op for us.
                           (values)))))))))))))
+     ;; R22: use values instead of #f, see R03
      (make-base-operation #f try-fn block-fn))))
 
 (define (get-operation channel)
