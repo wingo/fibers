@@ -1,5 +1,7 @@
 # fibers
-# Copyright (C) 2016  Andy Wingo <wingo@pobox.com>
+# Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+# Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+# Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
@@ -31,7 +33,7 @@ SOURCES = \
 	fibers/config.scm \
 	fibers/counter.scm \
 	fibers/deque.scm \
-	fibers/epoll.scm \
+	fibers/libevent.scm \
 	fibers/interrupts.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
@@ -44,23 +46,37 @@ SOURCES = \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
-BUILT_SOURCES = fibers/config.scm
+BUILT_SOURCES = fibers/config.scm fibers/posix-clocks.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
-extlib_LTLIBRARIES = epoll.la
+extlib_LTLIBRARIES = fibers-libevent.la
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
-epoll_la_SOURCES = epoll.c
-epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
-epoll_la_LIBADD = $(GUILE_LIBS)
-epoll_la_LDFLAGS = -export-dynamic -module
-$(GOBJECTS): epoll.la
+fibers_libevent_la_SOURCES = libevent.c
+fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
+
+if DARWIN
+extlib_LTLIBRARIES += fibers-affinity.la
+fibers_affinity_la_SOURCES = affinity.c
+fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
+
+extlib_LTLIBRARIES += fibers-darwin-clocks.la
+fibers_darwin_clocks_la_SOURCES = clock_nanosleep.c
+fibers_darwin_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_darwin_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
+endif
 
 fibers/config.scm: Makefile fibers/config.scm.in
 	mkdir -p fibers
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-CLEANFILES += fibers/config.scm
+fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
+	mkdir -p fibers
+	cat $(srcdir)/fibers/posix-clocks-$(PLATFORM).scm > fibers/posix-clocks.scm
+
+CLEANFILES += fibers/config.scm fibers/posix-clocks.scm
 
 TESTS = \
 	tests/basic.scm \

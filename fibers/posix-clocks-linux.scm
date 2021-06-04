@@ -1,17 +1,19 @@
-;; POSIX clocks
+;; POSIX clocks (Linux)
 
+;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+;;;; Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
-;;;; 
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
@@ -23,22 +25,11 @@
   #:use-module (system foreign)
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
-  #:export (CLOCK_REALTIME
-            CLOCK_MONOTONIC
-            CLOCK_PROCESS_CPUTIME_ID
-            CLOCK_THREAD_CPUTIME_ID
-            CLOCK_MONOTONIC_RAW
-            CLOCK_REALTIME_COARSE
-            CLOCK_MONOTONIC_COARSE
-
+  #:export (init-posix-clocks
+            clock-nanosleep
             clock-getcpuclockid
             pthread-getcpuclockid
-            pthread-self
-
-            clock-getres
-            clock-gettime
-
-            clock-nanosleep))
+            pthread-self))
 
 (define exe (dynamic-link))
 
@@ -58,6 +49,15 @@
 (define CLOCK_REALTIME_COARSE 5)
 (define CLOCK_MONOTONIC_COARSE 6)
 
+(define init-posix-clocks
+  (lambda () *unspecified*))
+
+(define pthread-self
+  (let* ((ptr (dynamic-pointer "pthread_self" exe))
+         (proc (pointer->procedure pthread-t ptr '())))
+    (lambda ()
+      (proc))))
+
 (define clock-getcpuclockid
   (let* ((ptr (dynamic-pointer "clock_getcpuclockid" exe))
          (proc (pointer->procedure int ptr (list pid-t '*)
@@ -67,12 +67,6 @@
         (lambda (ret errno)
           (unless (zero? ret) (error (strerror errno)))
           (bytevector-s32-native-ref buf 0))))))
-
-(define pthread-self
-  (let* ((ptr (dynamic-pointer "pthread_self" exe))
-         (proc (pointer->procedure pthread-t ptr '())))
-    (lambda ()
-      (proc))))
 
 (define pthread-getcpuclockid
   (let* ((ptr (dynamic-pointer "pthread_getcpuclockid" exe))
@@ -84,29 +78,10 @@
           (unless (zero? ret) (error (strerror errno)))
           (bytevector-s32-native-ref buf 0))))))
 
-(define clock-getres
-  (let* ((ptr (dynamic-pointer "clock_getres" exe))
-         (proc (pointer->procedure int ptr (list clockid-t '*)
-                                   #:return-errno? #t)))
-    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
-      (call-with-values (lambda () (proc clockid buf))
-        (lambda (ret errno)
-          (unless (zero? ret) (error (strerror errno)))
-          (timespec->nsec buf))))))
-
-(define clock-gettime
-  (let* ((ptr (dynamic-pointer "clock_gettime" exe))
-         (proc (pointer->procedure int ptr (list clockid-t '*)
-                                   #:return-errno? #t)))
-    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
-      (call-with-values (lambda () (proc clockid buf))
-        (lambda (ret errno)
-          (unless (zero? ret) (error (strerror errno)))
-          (timespec->nsec buf))))))
-
 (define (nsec->timespec nsec)
   (make-c-struct struct-timespec
                  (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
+
 (define (timespec->nsec ts)
   (match (parse-c-struct ts struct-timespec)
     ((sec nsec)
@@ -123,12 +98,22 @@
          ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
          (else (error (strerror ret))))))))
 
+(define clock-gettime
+  (let* ((ptr (dynamic-pointer "clock_gettime" exe))
+         (proc (pointer->procedure int ptr (list clockid-t '*)
+                                   #:return-errno? #t)))
+    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
+      (call-with-values (lambda () (proc clockid buf))
+        (lambda (ret errno)
+          (unless (zero? ret) (error (strerror errno)))
+          (timespec->nsec buf))))))
+
 ;; Quick little test to determine the resolution of clock-nanosleep on
 ;; different clock types, and how much CPU that takes.  Results on
 ;; this 2-core, 2-thread-per-core skylake laptop:
 ;;
 ;; Clock type     | Applied Hz | Actual Hz | CPU time overhead (%)
-;; ---------------------------------------------------------------         
+;; ---------------------------------------------------------------
 ;; MONOTONIC        100          98           0.4
 ;; MONOTONIC        1000         873          4.4
 ;; MONOTONIC        10000        6242         6.4
