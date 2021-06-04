@@ -646,7 +646,7 @@ Equivalent to:
 
 @defun get-message channel
 Receive a message from @var{channel} and return it.  If there is
-already a receiver waiting to send a message on this channel, take its
+already a sender waiting to send a message on this channel, take its
 message directly.  Otherwise, block until a sender becomes available.
 
 Equivalent to:
