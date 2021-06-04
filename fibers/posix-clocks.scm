@@ -1,17 +1,17 @@
 ;; POSIX clocks
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
-;;;; 
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
@@ -23,6 +23,7 @@
   #:use-module (system foreign)
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
+  #:use-module (fibers system)
   #:export (CLOCK_REALTIME
             CLOCK_MONOTONIC
             CLOCK_PROCESS_CPUTIME_ID
@@ -48,15 +49,7 @@
 (define pthread-t unsigned-long)
 (define struct-timespec (list time-t long))
 
-(define TIMER_ABSTIME 1)
-
-(define CLOCK_REALTIME 0)
-(define CLOCK_MONOTONIC 1)
-(define CLOCK_PROCESS_CPUTIME_ID 2)
-(define CLOCK_THREAD_CPUTIME_ID 3)
-(define CLOCK_MONOTONIC_RAW 4)
-(define CLOCK_REALTIME_COARSE 5)
-(define CLOCK_MONOTONIC_COARSE 6)
+(define TIMER_ABSTIME 1) ; move to system-$OS.scm.in if this ever differs on systems
 
 (define clock-getcpuclockid
   (let* ((ptr (dynamic-pointer "clock_getcpuclockid" exe))
@@ -113,22 +106,20 @@
      (+ (* sec #e1e9) nsec))))
 
 (define clock-nanosleep
-  (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))
-         (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
-    (lambda* (clockid nsec #:key absolute? (buf (nsec->timespec nsec)))
-      (let* ((flags (if absolute? TIMER_ABSTIME 0))
-             (ret (proc clockid flags buf buf)))
-        (cond
-         ((zero? ret) (values #t 0))
-         ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
-         (else (error (strerror ret))))))))
+  (lambda* (clockid nsec #:key absolute? (buf (nsec->timespec nsec)))
+    (let* ((flags (if absolute? TIMER_ABSTIME 0))
+           (ret (system-clock-nanosleep clockid flags buf)))
+      (cond
+       ((zero? ret) (values #t 0))
+       ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
+       (else (error (strerror ret)))))))
 
 ;; Quick little test to determine the resolution of clock-nanosleep on
 ;; different clock types, and how much CPU that takes.  Results on
 ;; this 2-core, 2-thread-per-core skylake laptop:
 ;;
 ;; Clock type     | Applied Hz | Actual Hz | CPU time overhead (%)
-;; ---------------------------------------------------------------         
+;; ---------------------------------------------------------------
 ;; MONOTONIC        100          98           0.4
 ;; MONOTONIC        1000         873          4.4
 ;; MONOTONIC        10000        6242         6.4
