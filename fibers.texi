@@ -722,6 +722,14 @@ signalled.  Equivalent to @code{(perform-operation (wait-operation
 cvar))}.
 @end defun
 
+@defun condition-signalled? cvar
+Return @code{#t} if @var{cvar} has already been signalled.
+
+In general you will want to use @code{wait} or @code{wait-operation} to
+wait on a condition.  However, sometimes it is useful to see whether or
+not a condition has already been signalled without blocking if not.
+@end defun
+
 @node REPL Commands
 @section REPL Commands
 
