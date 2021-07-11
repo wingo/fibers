@@ -2,17 +2,17 @@
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;; Copyright (C) 2017 Christopher Allan Webber <cwebber@dustycloud.org>
-;;;; 
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
@@ -72,10 +72,18 @@
   (match dq
     ((() . ()) (values #f #f))
     ((() . tail)
-     (dequeue (make-deque (reverse tail) '())))
+     ;; R22: that should be dequeue-match?
+     (dequeue-match (make-deque (reverse tail) '()) pred))
     (((item . head) . tail)
      (if (pred item)
          (values (make-deque head tail) item)
+         ;; R23: the above (reverse tail) and that recursive call
+         ;; makes me wonder whether a deque is really what is best.
+         ;; It seems to me at the end of the day what is important is
+         ;; that the channel makes progress *fast* and the order when
+         ;; operation does not matter. vector-random-for-each (R14),
+         ;; and POSIX thread scheduling may deliver too much
+         ;; randomness eliminating the fairness of a FIFO?
          (call-with-values (dequeue-match (make-deque head tail) pred)
            (lambda (dq item*)
              (values (undequeue dq item) item*)))))))
@@ -92,6 +100,7 @@
            (filter pred tail)))))
 
 (define-inlinable (update! box f)
+  ;; R24: This may run an infinite loop. Fail fast!
   (let spin ((x (atomic-box-ref box)))
     (call-with-values (lambda () (f x))
       (lambda (x* ret)
