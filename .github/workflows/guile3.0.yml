@@ -1,0 +1,33 @@
+name: GNU Guile 3.0
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install guile-3.0 guile-3.0-libs
+          sudo apt install guile-3.0-dev texinfo
+          sudo apt install automake autoconf
+          sudo apt install libtool
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Autogen
+        run: ./autogen.sh
+      - name: Configure
+        run: ./configure
+      - name: Make
+        run: make
+      - name: Run tests
+        run: make check
+      - name: Make distribution
+        run: make distcheck
