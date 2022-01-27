@@ -17,7 +17,7 @@ jobs:
           sudo apt update
           sudo apt install automake autoconf libtool pkg-config make gcc
           sudo apt install guile-3.0 guile-3.0-libs guile-3.0-dev
-          sudo apt install gettext texinfo
+          sudo apt install gettext texinfo texlive
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Autogen
