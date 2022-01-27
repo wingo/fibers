@@ -15,10 +15,9 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install guile-3.0 guile-3.0-libs
-          sudo apt install guile-3.0-dev texinfo
-          sudo apt install automake autoconf
-          sudo apt install libtool
+          sudo apt install automake autoconf libtool pkg-config make gcc
+          sudo apt install guile-3.0 guile-3.0-libs guile-3.0-dev
+          sudo apt install gettext texinfo
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Autogen
