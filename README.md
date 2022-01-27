@@ -3,8 +3,14 @@
 Fibers is a facility that provides Go-like concurrency for Guile
 Scheme, in the tradition of Concurrent ML.
 
-[https://github.com/wingo/fibers/actions/workflows/guile2.2.yml/badge.svg](https://github.com/wingo/fibers/actions/workflows/guile2.2.yml)
-[https://github.com/wingo/fibers/actions/workflows/guile3.0.yml/badge.svg](https://github.com/wingo/fibers/actions/workflows/guile3.0.yml)
+<p>
+  <a href="https://github.com/wingo/fibers/actions/workflows/guile2.2.yml">
+    <img src="https://github.com/wingo/fibers/actions/workflows/guile2.2.yml/badge.svg"/>
+  </a>
+  <a href="https://github.com/wingo/fibers/actions/workflows/guile3.0.yml">
+    <img src="https://github.com/wingo/fibers/actions/workflows/guile3.0.yml/badge.svg"/>
+  </a>
+</p>
 
 ## A pasteable introduction to using Fibers
 
