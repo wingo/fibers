@@ -54,6 +54,8 @@ Mailing List: `guile-user@gnu.org`
 
 Homepage: https://github.com/wingo/fibers
 
+Download: https://github.com/wingo/fibers/releases
+
 Manual: https://github.com/wingo/fibers/wiki/Manual
 
 
