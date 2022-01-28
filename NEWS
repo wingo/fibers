@@ -2,6 +2,29 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
+fibers 1.1.0 -- ??
+==========================
+
+* Handle EPOLLHUP like EPOLLERR.
+
+* Don't use deprecated types scm_t_uint64 and scm_t_int64.
+
+* Garbage collect synchronized items from channels queues.
+
+* Added guix.scm for local development.
+
+* Improve fibers performance by installing "catch" in scheduler instead of in
+  the fiber itself.
+
+* Rebased fibers on top of lighter-weight "tasks".
+
+* Garbage collect old condition waiters.
+
+* Multiple documentation fixes and improvements.
+
+* Added benchmarks.
+
+* Support Guile 3.0 compilation.
 
 fibers 1.0.0 -- 2017-02-20
 ==========================
