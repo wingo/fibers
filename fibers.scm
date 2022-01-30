@@ -135,6 +135,7 @@
              (%run-fibers scheduler hz finished? affinity))
            (lambda ()
              (stop-auxiliary-threads scheduler)))))
+      (for-each destroy-scheduler (scheduler-remote-peers scheduler))
       (destroy-scheduler scheduler)
       (apply values (atomic-box-ref ret))))))
 
