@@ -120,11 +120,21 @@
       (unless init
         (error "run-fibers requires initial fiber thunk when creating sched"))
       (spawn-fiber (lambda ()
-                     (call-with-values init
-                       (lambda vals (atomic-box-set! ret vals)))
-                     ;; Could be that this fiber was migrated away.
-                     ;; Make sure to wake up the main scheduler.
-                     (spawn-fiber (lambda () #t) scheduler))
+                     (dynamic-wind
+		       (const #t)
+		       (lambda ()
+			 (catch #t
+			   (lambda ()
+			     (call-with-values init
+			       (lambda vals (atomic-box-set! ret
+							     (list 'ok vals)))))
+			   (lambda args
+			     (atomic-box-set! ret (list 'err args))
+			     (apply throw args))))
+		       ;; Could be that this fiber was migrated away.
+		       ;; Make sure to wake up the main scheduler.
+		       (lambda ()
+			 (spawn-fiber (lambda () #t) scheduler))))
                    scheduler)
       (match affinities
         ((affinity . affinities)
@@ -136,7 +146,11 @@
            (lambda ()
              (stop-auxiliary-threads scheduler)))))
       (destroy-scheduler scheduler)
-      (apply values (atomic-box-ref ret))))))
+      (match (atomic-box-ref ret)
+        (('ok vals)
+         (apply values vals))
+        (('err args)
+         (apply throw args)))))))
 
 (define* (spawn-fiber thunk #:optional scheduler #:key parallel?)
   "Spawn a new fiber which will start by invoking @var{thunk}.
