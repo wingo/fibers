@@ -5,13 +5,13 @@
 @c %**end of header
 
 @set VERSION 1.1.0
-@set UPDATED 6 August 2017
+@set UPDATED 31 January 2022
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated
 @value{UPDATED})
 
-Copyright 2016-2017 Andy Wingo
+Copyright 2016-2022 Andy Wingo
 
 @quotation
 @c For more information, see COPYING.docs in the fibers

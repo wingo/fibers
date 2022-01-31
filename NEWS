@@ -2,8 +2,10 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
-fibers 1.1.0 -- ??
+fibers 1.1.0 -- 2022-01-31
 ==========================
+
+* Destroy peer schedulers when returning from run-fibers.
 
 * Handle EPOLLHUP like EPOLLERR.
 
@@ -72,7 +74,7 @@ fibers 0.1.0 -- 2016-07-02
 * First release.
 
 
-Copyright (C) 2016 Andy Wingo <wingo at pobox dot com>
+Copyright (C) 2016-2022 Andy Wingo <wingo at pobox dot com>
 
 Copying and distribution of this file, with or without modification, are
 permitted in any medium without royalty provided the copyright notice
