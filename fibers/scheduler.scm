@@ -320,6 +320,20 @@ value.  Return zero values."
   "Arrange for @var{sched} to schedule @var{task} when the file
 descriptor @var{fd} becomes active with any of the given @var{events},
 expressed as an epoll bitfield."
+  (define (fd-finalizer fd-waiters)
+    (lambda (fd)
+      ;; When a file port is closed, clear out the list of
+      ;; waiting tasks so that when/if this FD is re-used, we
+      ;; don't resume stale tasks.  Note that we don't need to
+      ;; remove the FD from the epoll set, as the kernel manages
+      ;; that for us.
+      ;;
+      ;; FIXME: Is there a way to wake all tasks in a thread-safe
+      ;; way?  Note that this function may be invoked from a
+      ;; finalizer thread.
+      (set-cdr! fd-waiters '())
+      (set-car! fd-waiters #f)))
+
   (let ((fd-waiters (hashv-ref (scheduler-fd-waiters sched) fd)))
     (match fd-waiters
       ((active-events . waiters)
@@ -328,24 +342,13 @@ expressed as an epoll bitfield."
                     (= (logand events active-events) events))
          (let ((active-events (logior events (or active-events 0))))
            (set-car! fd-waiters active-events)
+           (add-fdes-finalizer! fd (fd-finalizer fd-waiters))
            (epoll-add*! (scheduler-epfd sched) fd
                         (logior active-events EPOLLONESHOT)))))
       (#f
        (let ((fd-waiters (list events (cons events task))))
-         (define (finalize-fd fd)
-           ;; When a file port is closed, clear out the list of
-           ;; waiting tasks so that when/if this FD is re-used, we
-           ;; don't resume stale tasks.  Note that we don't need to
-           ;; remove the FD from the epoll set, as the kernel manages
-           ;; that for us.
-           ;;
-           ;; FIXME: Is there a way to wake all tasks in a thread-safe
-           ;; way?  Note that this function may be invoked from a
-           ;; finalizer thread.
-           (set-cdr! fd-waiters '())
-           (set-car! fd-waiters #f))
          (hashv-set! (scheduler-fd-waiters sched) fd fd-waiters)
-         (add-fdes-finalizer! fd finalize-fd)
+         (add-fdes-finalizer! fd (fd-finalizer fd-waiters))
          (epoll-add*! (scheduler-epfd sched) fd
                       (logior events EPOLLONESHOT)))))))
 
