@@ -39,8 +39,11 @@
             EPOLLIN EPOLLOUT EPOLLPRO EPOLLERR EPOLLHUP EPOLLET))
 
 (eval-when (eval load compile)
-  (dynamic-call "init_fibers_epoll"
-                (dynamic-link (extension-library "epoll"))))
+  ;; When cross-compiling, the cross-compiled 'epoll.so' cannot be loaded by
+  ;; the 'guild compile' process; skip it.
+  (unless (getenv "FIBERS_CROSS_COMPILING")
+    (dynamic-call "init_fibers_epoll"
+                  (dynamic-link (extension-library "epoll")))))
 
 (when (defined? 'EPOLLRDHUP)
   (export EPOLLRDHUP))

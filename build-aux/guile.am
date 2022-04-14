@@ -1,3 +1,9 @@
+if CROSS_COMPILING
+CROSS_COMPILING_VARIABLE = FIBERS_CROSS_COMPILING=yes
+else
+CROSS_COMPILING_VARIABLE =
+endif
+
 GOBJECTS = $(SOURCES:%.scm=%.go)
 
 nobase_mod_DATA = $(SOURCES) $(NOCOMP_SOURCES)
@@ -16,4 +22,5 @@ EXTRA_DIST = $(SOURCES) $(NOCOMP_SOURCES)
 GUILE_WARNINGS = -Wunbound-variable -Warity-mismatch -Wformat
 SUFFIXES = .scm .go
 .scm.go:
-	$(AM_V_GEN)$(top_builddir)/env $(GUILE_TOOLS) compile $(GUILE_WARNINGS) -o "$@" "$<"
+	$(AM_V_GEN)$(CROSS_COMPILING_VARIABLE)$(top_builddir)/env \
+	  $(GUILE_TOOLS) compile $(GUILE_WARNINGS) -o "$@" "$<"
