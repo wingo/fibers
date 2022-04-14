@@ -76,14 +76,14 @@
   (lambda (x)
     (syntax-case x ()
       ((_ n)
-       #`(* n #,%sizeof-struct-epoll-event)))))
+       #`(* n %sizeof-struct-epoll-event)))))
 
 (define-syntax fd-offset
   (lambda (x)
     (syntax-case x ()
       ((_ n)
-       #`(+ (* n #,%sizeof-struct-epoll-event)
-            #,%offsetof-struct-epoll-event-fd)))))
+       #`(+ (* n %sizeof-struct-epoll-event)
+            %offsetof-struct-epoll-event-fd)))))
 
 (define epoll-guardian (make-guardian))
 (define (pump-epoll-guardian)
