@@ -4,8 +4,8 @@
 @settitle Fibers
 @c %**end of header
 
-@set VERSION 1.1.0
-@set UPDATED 31 January 2022
+@set VERSION 1.1.1
+@set UPDATED 3 June 2022
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated

@@ -2,6 +2,19 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
+fibers 1.1.1 -- 2022-06-03
+==========================
+
+* Always add file descriptors finalizer in (schedule-task-when-fd-active).
+
+* Do not load 'epoll.so' during cross-compilation.
+
+* Pass '--target' and '-L' to 'guild compile' when cross-compiling.
+
+* Do not refer to 'epoll.so'-provided variables at expansion time.
+
+* Install .go files to …/site-ccache, not …/ccache.
+
 fibers 1.1.0 -- 2022-01-31
 ==========================
 
