@@ -70,7 +70,8 @@ TESTS = \
 	tests/parameters.scm \
         tests/ports.scm \
 	tests/preemption.scm \
-	tests/speedup.scm
+	tests/speedup.scm \
+	tests/concurrent-web-server.scm
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \

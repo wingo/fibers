@@ -31,10 +31,12 @@
   #:use-module (fibers conditions)
   #:use-module (rnrs bytevectors)
   #:use-module (ice-9 binary-ports)
+  #:use-module (ice-9 textual-ports)
   #:use-module (ice-9 iconv)
   #:use-module (ice-9 match)
   #:use-module ((srfi srfi-9 gnu) #:select (set-field))
   #:use-module (system repl error-handling)
+  #:use-module (web http)
   #:use-module (web request)
   #:use-module (web response)
   #:export (run-server))
@@ -103,19 +105,8 @@ on the procedure being called at any particular time."
            (extend-response response 'content-type
                             `(,@type (charset . ,charset))))
        (string->bytevector body charset))))
-   ((procedure? body)
-    (let* ((type (response-content-type response
-                                        '(text/plain)))
-           (declared-charset (assq-ref (cdr type) 'charset))
-           (charset (or declared-charset "utf-8")))
-      (sanitize-response
-       request
-       (if declared-charset
-           response
-           (extend-response response 'content-type
-                            `(,@type (charset . ,charset))))
-       (call-with-encoded-output-string charset body))))
-   ((not (bytevector? body))
+   ((not (or (bytevector? body)
+             (procedure? body)))
     (error "unexpected body type"))
    ((and (response-must-not-include-body? response)
          body
@@ -124,13 +115,19 @@ on the procedure being called at any particular time."
     (error "response with this status code must not include body" response))
    (else
     ;; check length; assert type; add other required fields?
-    (values (let ((rlen (response-content-length response))
-                  (blen (bytevector-length body)))
-              (cond
-               (rlen (if (= rlen blen)
-                         response
-                         (error "bad content-length" rlen blen)))
-               (else (extend-response response 'content-length blen))))
+    (values (if (procedure? body)
+                (if (response-content-length response)
+                    response
+                    (extend-response response
+                                     'transfer-encoding
+                                     '((chunked))))
+                (let ((rlen (response-content-length response))
+                      (blen (bytevector-length body)))
+                  (cond
+                   (rlen (if (= rlen blen)
+                             response
+                             (error "bad content-length" rlen blen)))
+                   (else (extend-response response 'content-length blen)))))
             (if (eq? (request-method request) 'HEAD)
                 ;; Responses to HEAD requests must not include bodies.
                 ;; We could raise an error here, but it seems more
@@ -208,7 +205,15 @@ on the procedure being called at any particular time."
                 (lambda (response body)
                   (write-response response client)
                   (when body
-                    (put-bytevector client body))
+                    (if (procedure? body)
+                        (if (response-content-length response)
+                            (body client)
+                            (let ((chunked-port
+                                   (make-chunked-output-port client
+                                                             #:keep-alive? #t)))
+                              (body chunked-port)
+                              (close-port chunked-port)))
+                        (put-bytevector client body)))
                   (force-output client)
                   (if (keep-alive? response)
                       (loop)
