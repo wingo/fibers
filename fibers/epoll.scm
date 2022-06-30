@@ -1,6 +1,7 @@
 ;; epoll
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+;;;; Copyright (C) 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;; 
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -135,7 +136,12 @@ epoll wait (if appropriate)."
     ('waiting
      (primitive-epoll-wake (fileno (epoll-wake-write-pipe epoll))))
     ('not-waiting #t)
-    ('dead (error "epoll instance is dead"))))
+    ;; This can happen if a fiber was waiting on a condition and
+    ;; run-fibers completes before the fiber completes and afterwards
+    ;; the condition is signalled.  In that case, we don't have to
+    ;; resurrect the fiber or something, we can just do nothing.
+    ;; (Bug report: https://github.com/wingo/fibers/issues/61)
+    ('dead #t)))
 
 (define (epoll-default-folder fd events seed)
   (acons fd events seed))
