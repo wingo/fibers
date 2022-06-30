@@ -1,6 +1,7 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -21,6 +22,7 @@
   #:use-module (fibers)
   #:use-module (fibers conditions)
   #:use-module (fibers operations)
+  #:use-module (fibers scheduler)
   #:use-module (fibers timers))
 
 (define failed? #f)
@@ -77,5 +79,23 @@
                              (spawn-fiber (lambda () (signal-condition! cv)))
                              (wait cv)
                              #t))
+
+;; Make a condition, wait for it inside a fiber, let the fiber abruptly
+;; terminate and signal the condition afterwards.  This tests for the bug
+;; noticed at <https://github.com/wingo/fibers/issues/61>.
+(assert-equal #t
+	      (let ((cv (make-condition)))
+		(run-fibers
+		 (lambda ()
+		   (spawn-fiber (lambda () (wait cv)))
+		   (yield-current-task)) ; let the other fiber wait forever
+		 ;; This test relies on not draining -- this is the default,
+		 ;; but let's make this explicit.
+		 #:drain? #false ;
+		 ;; For simplicity, disable concurrency and preemption.
+		 ;; That way, we can use 'yield-current-task' instead of an
+		 ;; arbitrary sleep time.
+		 #:hz 0 #:parallelism 1)
+		(signal-condition! cv)))
 
 (exit (if failed? 1 0))
