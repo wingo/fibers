@@ -12,6 +12,7 @@ This manual is for Fibers (version @value{VERSION}, updated
 @value{UPDATED})
 
 Copyright 2016-2022 Andy Wingo
+Copyright 2021 Maxime Devos
 
 @quotation
 @c For more information, see COPYING.docs in the fibers
@@ -453,6 +454,7 @@ of operations for channels and timers, and an internals interface.
 * Channels::             Share memory by communicating.
 * Timers::               Operations on time.
 * Conditions::           Waiting for simple state changes.
+* Port Readiness::       Waiting until a port is ready for I/O.
 * REPL Commands::        Experimenting with Fibers at the console.
 * Schedulers and Tasks:: Fibers are built from lower-level primitives.
 @end menu
@@ -720,6 +722,28 @@ becomes signalled.
 Block the calling fiber or kernel thread until @var{cvar} becomes
 signalled.  Equivalent to @code{(perform-operation (wait-operation
 cvar))}.
+@end defun
+
+@node Port Readiness
+@section Port Readiness
+
+These two operations can be used on file ports to wait until
+they are readable or writable.  Spurious wake-ups are possible.
+This is complementary to Guile's suspendable ports.
+
+@example
+(use-modules (fibers io-wakeup))
+@end example
+
+@defun wait-until-port-readable-operation port
+Make an operation that will succeed with no values when the input
+port @var{port} becomes readable.  For passive sockets, this operation
+succeeds when a connection becomes available.
+@end defun
+
+@defun wait-until-port-writable-operation
+Make an operation that will succeed with no values when the output
+port @var{port} becomes writable.
 @end defun
 
 @node REPL Commands
