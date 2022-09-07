@@ -52,14 +52,10 @@
   (export EPOLLONESHOT))
 
 (define (make-wake-pipe)
-  (define (set-nonblocking! port)
-    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL))))
-  (let ((pair (pipe)))
+  (let ((pair (pipe2 (logior O_NONBLOCK O_CLOEXEC))))
     (match pair
       ((read-pipe . write-pipe)
        (setvbuf write-pipe 'none)
-       (set-nonblocking! read-pipe)
-       (set-nonblocking! write-pipe)
        (values read-pipe write-pipe)))))
 
 (define-record-type <epoll>

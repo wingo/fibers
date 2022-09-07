@@ -1,5 +1,6 @@
 /* Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
- * 
+ * Copyright (C) 2022 Ludovic Courtès <ludo@gnu.org>
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
  * as published by the Free Software Foundation; either version 3 of
@@ -213,6 +214,30 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
 }
 #undef FUNC_NAME
 
+static SCM sym_read_pipe, sym_write_pipe;
+
+static SCM
+scm_pipe2 (SCM flags)
+#define FUNC_NAME "scm_pipe2"
+{
+  int c_flags, ret, fd[2];
+  SCM read_port, write_port;
+
+  if (scm_is_eq (flags, SCM_UNDEFINED))
+    c_flags = 0;
+  else
+    SCM_VALIDATE_INT_COPY (1, flags, c_flags);
+
+  do
+    ret = pipe2 (fd, c_flags);
+  while (ret == EINTR);
+
+  read_port = scm_fdes_to_port (fd[0], "r", sym_read_pipe);
+  write_port = scm_fdes_to_port (fd[1], "w", sym_write_pipe);
+
+  return scm_cons (read_port, write_port);
+}
+#undef FUNC_NAME
 
 
 
@@ -249,6 +274,10 @@ init_fibers_epoll (void)
   scm_c_define ("EPOLL_CTL_ADD", scm_from_int (EPOLL_CTL_ADD));
   scm_c_define ("EPOLL_CTL_MOD", scm_from_int (EPOLL_CTL_MOD));
   scm_c_define ("EPOLL_CTL_DEL", scm_from_int (EPOLL_CTL_DEL));
+
+  scm_c_define_gsubr ("pipe2", 0, 1, 0, scm_pipe2);
+  sym_read_pipe = scm_from_latin1_string ("read pipe");
+  sym_write_pipe = scm_from_latin1_string ("write pipe");
 }
 
 /*
