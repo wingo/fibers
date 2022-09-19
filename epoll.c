@@ -32,6 +32,10 @@
 #include <sys/epoll.h>
 #include <libguile.h>
 
+#if SCM_MAJOR_VERSION == 2
+# include <fcntl.h>				  /* O_CLOEXEC */
+#endif
+
 /* {EPoll}
  */
 
@@ -278,6 +282,11 @@ init_fibers_epoll (void)
   scm_c_define_gsubr ("pipe2", 0, 1, 0, scm_pipe2);
   sym_read_pipe = scm_from_latin1_string ("read pipe");
   sym_write_pipe = scm_from_latin1_string ("write pipe");
+
+#if SCM_MAJOR_VERSION == 2
+  /* Guile 2.2.7 lacks a definition for O_CLOEXEC.  */
+  scm_c_define ("O_CLOEXEC", scm_from_int (O_CLOEXEC));
+#endif
 }
 
 /*
