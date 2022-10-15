@@ -1383,9 +1383,9 @@ be able to not only the input and output running concurrently, but
 also handlers too.
 
 For this reason, Fibers includes a simple standalone web server that
-uses Guile's Guile's HTTP facilities, but not its web server
-framework.  To run a standalone web server, use the @code{(fibers web
-server)} module:
+uses Guile's HTTP facilities, but not its web server framework.  To
+run a standalone web server, use the @code{(fibers web server)}
+module:
 
 @example
 (use-modules (fibers web server))
