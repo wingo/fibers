@@ -741,7 +741,7 @@ port @var{port} becomes readable.  For passive sockets, this operation
 succeeds when a connection becomes available.
 @end defun
 
-@defun wait-until-port-writable-operation
+@defun wait-until-port-writable-operation port
 Make an operation that will succeed with no values when the output
 port @var{port} becomes writable.
 @end defun
