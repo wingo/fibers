@@ -32,6 +32,7 @@ build/
 /fibers.info
 /fibers/config.scm
 /fibers/posix-clocks.scm
+/fibers/events-impl.scm
 *.la
 *.lo
 *.go
