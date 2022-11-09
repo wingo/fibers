@@ -57,22 +57,19 @@
           ;; waiter list and epoll set are properly updated when a file
           ;; descriptor with the same value is reused, allowing the eventual
           ;; 'accept' call to succeed.
-          (let ((sock (socket AF_INET SOCK_STREAM 0)))
+          (let ((sock (socket AF_INET (logior SOCK_NONBLOCK SOCK_STREAM)
+                              0)))
             (pk 'listening-socket sock)
             (setsockopt sock SOL_SOCKET SO_REUSEADDR 1)
             (bind* sock address)
             (listen sock 1)
-            (fcntl sock F_SETFL
-                   (logior O_NONBLOCK (fcntl sock F_GETFL)))
 
             (if (zero? n)
                 (begin
                   ;; Let's go.
                   (put-message notification 'ready!)
-                  (match (pk 'accepted-connection (accept sock))
+                  (match (pk 'accepted-connection (accept sock SOCK_NONBLOCK))
                     ((connection . _)
-                     (fcntl connection F_SETFL
-                            (logior O_NONBLOCK (fcntl connection F_GETFL)))
                      (display (pk 'received (read-line connection)) connection)
                      (newline connection)
                      (close-port connection))))
@@ -101,9 +98,8 @@
      (match (get-message notification)
        ('ready!
         ;; Connect, send a message, and receive its echo.
-        (let ((sock (socket AF_INET SOCK_STREAM 0)))
-          (fcntl sock F_SETFL
-                 (logior O_NONBLOCK (fcntl sock F_GETFL)))
+        (let ((sock (socket AF_INET (logior SOCK_NONBLOCK SOCK_STREAM)
+                            0)))
           (connect sock address)
           (pk 'connected address)
           (display "hello!\n" sock)
