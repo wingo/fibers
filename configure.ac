@@ -47,7 +47,16 @@ AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build 
         [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
 
-build_darwin=no
+AC_ARG_WITH([libevent],
+        [AS_HELP_STRING([--with-libevent],
+                [use libevent for events backend  @<:@default=no@:>@])],
+        [],
+        [with_libevent=no])
+
+AS_IF([test "x$with_libevent" != xno],
+        [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],,
+                                       [AC_MSG_ERROR([unable to find libevent])])])
+AM_CONDITIONAL([WITH_LIBEVENT], [test "${with_libevent}" != "no"])
 
 # Detect the target system
 case "$host_os" in
@@ -64,11 +73,6 @@ esac
 AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
 AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
 AC_SUBST(PLATFORM)
-
-#
-# Dependencies
-#
-PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0])
 
 #
 # Check for Guile

@@ -1,7 +1,7 @@
 # fibers
-# Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
-# Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 # Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+# Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+# Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
@@ -33,7 +33,7 @@ SOURCES = \
 	fibers/config.scm \
 	fibers/counter.scm \
 	fibers/deque.scm \
-	fibers/libevent.scm \
+	fibers/events-impl.scm \
 	fibers/interrupts.scm \
 	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
@@ -47,14 +47,34 @@ SOURCES = \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
-BUILT_SOURCES = fibers/config.scm fibers/posix-clocks.scm
+BUILT_SOURCES = fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
-extlib_LTLIBRARIES = fibers-libevent.la
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
+
+extlib_LTLIBRARIES =
+
+if WITH_LIBEVENT
+extlib_LTLIBRARIES += fibers-libevent.la
 fibers_libevent_la_SOURCES = libevent.c
 fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
+
+fibers/events-impl.scm: fibers/libevent.scm
+	ln -sf libevent.scm fibers/events-impl.scm
+else
+if LINUX
+extlib_LTLIBRARIES += fibers-epoll.la
+fibers_epoll_la_SOURCES = epoll.c
+fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_epoll_la_LIBADD = $(GUILE_LIBS)
+fibers_epoll_la_LDFLAGS = -export-dynamic -module
+$(GOBJECTS): fibers-epoll.la
+
+fibers/events-impl.scm: fibers/epoll.scm
+	ln -sf epoll.scm fibers/events-impl.scm
+endif
+endif
 
 if DARWIN
 extlib_LTLIBRARIES += fibers-affinity.la
@@ -90,6 +110,7 @@ TESTS = \
 	tests/preemption.scm \
 	tests/speedup.scm \
 	tests/concurrent-web-server.scm
+
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
