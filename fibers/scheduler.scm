@@ -182,8 +182,10 @@ remote kernel thread."
     (#f (warn "scheduler for unknown fd" fd))
     ((and events+waiters (active-events . waiters))
      ;; First, clear the active status, as the EPOLLONESHOT has
-     ;; deactivated our entry in the epoll set.
-     (set-car! events+waiters #f)
+     ;; deactivated our entry in the epoll set.  Set the car to 0, not #f, so
+     ;; that 'schedule-tasks-for-active-fd' doesn't end up re-adding a
+     ;; finalizer on FD.
+     (set-car! events+waiters 0)
      (set-cdr! events+waiters '())
      (unless (zero? (logand revents (logior EPOLLHUP EPOLLERR)))
        (hashv-remove! (scheduler-fd-waiters sched) fd))
@@ -336,21 +338,19 @@ expressed as an epoll bitfield."
 
   (let ((fd-waiters (hashv-ref (scheduler-fd-waiters sched) fd)))
     (match fd-waiters
-      ((active-events . waiters)
-       (set-cdr! fd-waiters (acons events task waiters))
-       (unless (and active-events
-                    (= (logand events active-events) events))
-         (let ((active-events (logior events (or active-events 0))))
-           (set-car! fd-waiters active-events)
-           (add-fdes-finalizer! fd (fd-finalizer fd-waiters))
-           (epoll-add*! (scheduler-epfd sched) fd
-                        (logior active-events EPOLLONESHOT)))))
-      (#f
+      ((or #f (#f))                               ;FD is new or was finalized
        (let ((fd-waiters (list events (cons events task))))
          (hashv-set! (scheduler-fd-waiters sched) fd fd-waiters)
          (add-fdes-finalizer! fd (fd-finalizer fd-waiters))
          (epoll-add*! (scheduler-epfd sched) fd
-                      (logior events EPOLLONESHOT)))))))
+                      (logior events EPOLLONESHOT))))
+      ((active-events . waiters)
+       (set-cdr! fd-waiters (acons events task waiters))
+       (unless (= (logand events active-events) events)
+         (let ((active-events (logior events active-events)))
+           (set-car! fd-waiters active-events)
+           (epoll-add*! (scheduler-epfd sched) fd
+                        (logior active-events EPOLLONESHOT))))))))
 
 (define (schedule-task-when-fd-readable sched fd task)
   "Arrange to schedule @var{task} on @var{sched} when the file
