@@ -95,6 +95,8 @@ TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 EXTRA_DIST += \
 	env.in \
 	fibers/config.scm.in \
+	fibers/epoll.scm \
+	fibers/libevent.scm \
 	fibers/posix-clocks.scm \
 	fibers/posix-clocks-linux.scm \
 	fibers/posix-clocks-darwin.scm \

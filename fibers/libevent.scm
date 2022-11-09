@@ -1,7 +1,7 @@
 ;; libevent
 
+;;;; Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
-;;;; Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 ;;;;
 
-(define-module (fibers libevent)
+(define-module (fibers events-impl)
     #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
     #:use-module (ice-9 atomic)
     #:use-module (ice-9 control)
@@ -28,13 +28,14 @@
     #:use-module (srfi srfi-9 gnu)
     #:use-module (rnrs bytevectors)
     #:use-module (fibers config)
-    #:export (libevt-create
-              libevt-destroy
-              libevt?
-              libevt-add!
-              libevt-wake!
-              libevt
-              EVREAD EVWRITE EVERR))
+    #:export (events-impl-create
+              events-impl-destroy
+              events-impl?
+              events-impl-add!
+              events-impl-wake!
+              events-impl-run
+
+              EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
 
 (eval-when (eval load compile)
   (dynamic-call "init_libevt"
@@ -45,8 +46,8 @@
   (export EVREAD))
 (when (defined? 'EVWRITE)
   (export EVWRITE))
-
-(define EVERR (logior EVREAD EVWRITE))
+(when (defined? 'EVCLOSED)
+  (export EVCLOSED))
 
 (define (make-wake-pipe)
   (define (set-nonblocking! port)
@@ -152,3 +153,22 @@
                   (events (bytevector-s32-native-ref eventsv (event-offset i))))
               (lp (folder fd events seed) (+ 1 i)))
             seed)))))
+
+;; Corresponding events, compared to epoll, found at
+;; https://github.com/libevent/libevent/blob/master/epoll.c
+(define EVENTS_IMPL_READ (logior EVREAD EVCLOSED))
+(define EVENTS_IMPL_WRITE EVWRITE)
+(define EVENTS_IMPL_ERROR (logior EVREAD EVWRITE))
+
+(define events-impl-create libevt-create)
+
+(define events-impl-destroy libevt-destroy)
+
+(define (events-impl? impl)
+  (libevt? impl))
+
+(define events-impl-add! libevt-add!)
+
+(define events-impl-wake! libevt-wake!)
+
+(define events-impl-run libevt)

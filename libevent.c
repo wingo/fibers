@@ -1,5 +1,5 @@
-/* Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
- * Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+/*
+ * Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  * Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -253,6 +253,7 @@ init_libevt (void)
   scm_c_define ("EVREAD", scm_from_int (EV_READ));
   scm_c_define ("EVWRITE", scm_from_int (EV_WRITE));
   scm_c_define ("EVPERSIST", scm_from_int (EV_PERSIST));
+  scm_c_define ("EVCLOSED", scm_from_int (EV_CLOSED));
 }
 
 /*

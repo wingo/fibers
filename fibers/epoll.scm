@@ -1,24 +1,25 @@
 ;; epoll
 
-;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+;;;; Copyright (C) 2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;; Copyright (C) 2022 Maxime Devos <maximedevos@telenet.be>
-;;;; 
+;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-;;;; 
+;;;;
 
-(define-module (fibers epoll)
+(define-module (fibers events-impl)
   #:use-module ((ice-9 binary-ports) #:select (get-u8 put-u8))
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 control)
@@ -27,24 +28,21 @@
   #:use-module (srfi srfi-9 gnu)
   #:use-module (rnrs bytevectors)
   #:use-module (fibers config)
-  #:export (epoll-create
-            epoll-destroy
-            epoll?
-            epoll-add!
-            epoll-modify!
-            epoll-add*!
-            epoll-remove!
-            epoll-wake!
-            epoll
+  #:export (events-impl-create
+            events-impl-destroy
+            events-impl?
+            events-impl-add!
+            events-impl-wake!
+            events-impl-run
 
-            EPOLLIN EPOLLOUT EPOLLPRO EPOLLERR EPOLLHUP EPOLLET))
+            EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
 
 (eval-when (eval load compile)
   ;; When cross-compiling, the cross-compiled 'epoll.so' cannot be loaded by
   ;; the 'guild compile' process; skip it.
   (unless (getenv "FIBERS_CROSS_COMPILING")
     (dynamic-call "init_fibers_epoll"
-                  (dynamic-link (extension-library "epoll")))))
+                  (dynamic-link (extension-library "fibers-epoll")))))
 
 (when (defined? 'EPOLLRDHUP)
   (export EPOLLRDHUP))
@@ -108,6 +106,9 @@
     (close-port (epoll-wake-write-pipe epoll))
     (close-fdes (epoll-fd epoll))
     (set-epoll-fd! epoll #f)))
+
+(define (events-impl? impl)
+  (epoll? impl))
 
 (define (epoll-add! epoll fd events)
   (primitive-epoll-ctl (epoll-fd epoll) EPOLL_CTL_ADD fd events))
@@ -189,3 +190,21 @@ epoll wait (if appropriate)."
                   (events (bytevector-u32-native-ref eventsv (events-offset i))))
               (lp (folder fd events seed) (1+ i)))
             seed)))))
+
+(define EVENTS_IMPL_READ (logior EPOLLIN EPOLLRDHUP))
+(define EVENTS_IMPL_WRITE EPOLLOUT)
+(define EVENTS_IMPL_ERROR (logior EPOLLHUP EPOLLERR))
+
+(define events-impl-create epoll-create)
+
+(define events-impl-destroy epoll-destroy)
+
+(define (events-impl? impl)
+  (epoll? impl))
+
+(define (events-impl-add! impl fd events)
+  (epoll-add*! impl fd (logior events EPOLLONESHOT)))
+
+(define events-impl-wake! epoll-wake!)
+
+(define events-impl-run epoll)

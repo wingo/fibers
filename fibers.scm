@@ -1,6 +1,6 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
-;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016-2022 Free Software Foundation, Inc.
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -25,7 +25,6 @@
   #:use-module (fibers timers)
   #:use-module (fibers interrupts)
   #:use-module (fibers posix-clocks)
-  #:use-module (fibers config)
   #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
