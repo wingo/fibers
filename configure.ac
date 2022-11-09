@@ -56,7 +56,7 @@ AC_ARG_WITH([libevent],
 AS_IF([test "x$with_libevent" != xno],
         [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],,
                                        [AC_MSG_ERROR([unable to find libevent])])])
-AM_CONDITIONAL([WITH_LIBEVENT], [test "${with_libevent}" != "no"])
+AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = xyes])
 
 # Detect the target system
 case "$host_os" in
@@ -70,8 +70,8 @@ case "$host_os" in
         ;;
 esac
 
-AM_CONDITIONAL([DARWIN], [test "$build_darwin" = "yes"])
-AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
+AM_CONDITIONAL([DARWIN], [test "x$build_darwin" = xyes])
+AM_CONDITIONAL([LINUX], [test "x$build_linux" = xyes])
 AC_SUBST(PLATFORM)
 
 #

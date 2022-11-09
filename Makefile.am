@@ -59,6 +59,7 @@ extlib_LTLIBRARIES += fibers-libevent.la
 fibers_libevent_la_SOURCES = libevent.c
 fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
+$(GOBJECTS): fibers-libevent.la
 
 fibers/events-impl.scm: fibers/libevent.scm
 	ln -sf libevent.scm fibers/events-impl.scm
@@ -97,7 +98,7 @@ fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
 	mkdir -p fibers
 	cat $(srcdir)/fibers/posix-clocks-$(PLATFORM).scm > fibers/posix-clocks.scm
 
-CLEANFILES += fibers/config.scm fibers/posix-clocks.scm
+CLEANFILES += fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
 
 TESTS = \
 	tests/basic.scm \
