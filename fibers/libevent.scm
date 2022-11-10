@@ -122,7 +122,12 @@
     ('waiting
      (primitive-event-wake (fileno (libevt-wake-write-pipe libevt))))
     ('not-waiting #t)
-    ('dead (error "libevt instance is dead"))))
+    ;; This can happen if a fiber was waiting on a condition and
+    ;; run-fibers completes before the fiber completes and afterwards
+    ;; the condition is signalled.  In that case, we don't have to
+    ;; resurrect the fiber or something, we can just do nothing.
+    ;; (Bug report: https://github.com/wingo/fibers/issues/61)
+    ('dead #t)))
 
 (define (libevt-default-folder fd events seed)
   (acons fd events seed))
