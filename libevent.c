@@ -203,21 +203,24 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
       if (c_timeout != 0)
         scm_c_wait_finished ();
 
-      for (int i = 0; i < data->rv; i++) {
-        if (data->events[i].fd == c_wokefd)
-          {
-            char zeroes[32];
-            /* Remove wake fd from result set.  */
-            data->rv--;
-            memmove (data->events + i,
-                     data->events + i + 1,
-                     (data->rv - i) * sizeof (struct event_data));
-            /* Drain fd and ignore errors. */
-            while (read (c_wokefd, zeroes, sizeof zeroes) == sizeof zeroes)
-              ;
-            break;
-          }
-      }
+      for (int i = 0; i < data->rv; i++)
+        {
+          if (data->events[i].fd == c_wokefd)
+            {
+              char zeroes[32];
+              /* Remove wake fd from result set.  */
+              data->rv--;
+              memmove (data->events + i,
+                       data->events + i + 1,
+                       (data->rv - i) * sizeof (struct event_data));
+              /* Drain fd and ignore errors. */
+              while (read (c_wokefd, zeroes, sizeof zeroes) == sizeof zeroes)
+                {
+                  // empty
+                }
+              break;
+            }
+        }
     }
 
   // Number of events triggered.
