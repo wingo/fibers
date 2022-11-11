@@ -57,7 +57,7 @@ free_libevt (void *ptr)
 {
   struct libevt_data *libevt = ptr;
   event_base_free (libevt->base);
-  free(libevt);
+  scm_gc_free(libevt, sizeof (struct libevt_data), "libevt_data");
 }
 
 static void

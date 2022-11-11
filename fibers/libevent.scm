@@ -33,6 +33,7 @@
               events-impl?
               events-impl-add!
               events-impl-wake!
+              events-impl-fd-finalizer
               events-impl-run
 
               EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
@@ -184,5 +185,18 @@
 (define events-impl-add! libevt-add!)
 
 (define events-impl-wake! libevt-wake!)
+
+(define (events-impl-fd-finalizer impl fd-waiters)
+  (lambda (fd)
+    ;; When a file port is closed, clear out the list of
+    ;; waiting tasks so that when/if this FD is re-used, we
+    ;; don't resume stale tasks.
+    ;;
+    ;; FIXME: Is there a way to wake all tasks in a thread-safe
+    ;; way?  Note that this function may be invoked from a
+    ;; finalizer thread.
+    (libevt-remove! impl fd)
+    (set-cdr! fd-waiters '())
+    (set-car! fd-waiters #f)))
 
 (define events-impl-run libevt)

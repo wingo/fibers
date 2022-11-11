@@ -33,6 +33,7 @@
             events-impl?
             events-impl-add!
             events-impl-wake!
+            events-impl-fd-finalizer
             events-impl-run
 
             EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
@@ -206,5 +207,19 @@ epoll wait (if appropriate)."
   (epoll-add*! impl fd (logior events EPOLLONESHOT)))
 
 (define events-impl-wake! epoll-wake!)
+
+(define (events-impl-fd-finalizer impl fd-waiters)
+  (lambda (fd)
+    ;; When a file port is closed, clear out the list of
+    ;; waiting tasks so that when/if this FD is re-used, we
+    ;; don't resume stale tasks. Note that we don't need to
+    ;; remove the FD from the epoll set, as the kernel manages
+    ;; that for us.
+    ;;
+    ;; FIXME: Is there a way to wake all tasks in a thread-safe
+    ;; way?  Note that this function may be invoked from a
+    ;; finalizer thread.
+    (set-cdr! fd-waiters '())
+    (set-car! fd-waiters #f)))
 
 (define events-impl-run epoll)

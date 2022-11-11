@@ -321,27 +321,13 @@ value.  Return zero values."
 (define (schedule-task-when-fd-active sched fd events task)
   "Arrange for @var{sched} to schedule @var{task} when the file descriptor
 @var{fd} becomes active with any of the given @var{events}."
-  (define (fd-finalizer fd-waiters)
-    (lambda (fd)
-      ;; When a file port is closed, clear out the list of
-      ;; waiting tasks so that when/if this FD is re-used, we
-      ;; don't resume stale tasks.
-      ;;
-      ;; epoll: Note that we don't need to remove the FD from the epoll
-      ;; set, as the kernel manages that for us.
-      ;;
-      ;; FIXME: Is there a way to wake all tasks in a thread-safe
-      ;; way?  Note that this function may be invoked from a
-      ;; finalizer thread.
-      (set-cdr! fd-waiters '())
-      (set-car! fd-waiters #f)))
-
   (let ((fd-waiters (hashv-ref (scheduler-fd-waiters sched) fd)))
     (match fd-waiters
       ((or #f (#f))                               ;FD is new or was finalized
        (let ((fd-waiters (list events (cons events task))))
          (hashv-set! (scheduler-fd-waiters sched) fd fd-waiters)
-         (add-fdes-finalizer! fd (fd-finalizer fd-waiters))
+         (add-fdes-finalizer! fd (events-impl-fd-finalizer (scheduler-events-impl sched)
+                                                           fd-waiters))
          (events-impl-add! (scheduler-events-impl sched) fd events)))
       ((active-events . waiters)
        (set-cdr! fd-waiters (acons events task waiters))
