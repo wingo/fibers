@@ -106,10 +106,16 @@ TESTS = \
 	tests/foreign.scm \
 	tests/io-wakeup.scm \
 	tests/parameters.scm \
-        tests/ports.scm \
 	tests/preemption.scm \
-	tests/speedup.scm \
+	tests/speedup.scm
+
+# On macOS we are missing SOCK_NONBLOCK and SOCK_CLOEXEC, so for now we only
+# include those tests in Linux.
+if LINUX
+TESTS += \
+        tests/ports.scm \
 	tests/concurrent-web-server.scm
+endif
 
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
