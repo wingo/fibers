@@ -66,8 +66,7 @@ cb_func (evutil_socket_t fd, short what, void *arg)
     }
 
   struct event_data ev_data = { fd, what };
-  int sz = sizeof (struct event_data);
-  memcpy (data->events + (rv * sz), &ev_data, sz);
+  memcpy (data->events + rv, &ev_data, sizeof (struct event_data));
 
   data->rv += 1;
 }
