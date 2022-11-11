@@ -162,6 +162,7 @@
     (let* ((timeout (expiry->timeout (update-expiry expiry)))
            (n (primitive-event-loop (libevt-ls libevt)
                                     write-pipe-fd read-pipe-fd timeout)))
+      (atomic-box-set! (libevt-state libevt) 'not-waiting)
       (let lp ((seed seed) (i 0))
         (if (< i n)
             (let ((fd (bytevector-s32-native-ref eventsv (fd-offset i)))
