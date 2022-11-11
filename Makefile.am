@@ -62,7 +62,7 @@ fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFL
 $(GOBJECTS): fibers-libevent.la
 
 fibers/events-impl.scm: Makefile fibers/libevent.scm
-	ln -sf libevent.scm fibers/events-impl.scm
+	ln -sf $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/fibers/events-impl.scm
 else
 if LINUX
 extlib_LTLIBRARIES += fibers-epoll.la
@@ -73,7 +73,7 @@ fibers_epoll_la_LDFLAGS = -export-dynamic -module
 $(GOBJECTS): fibers-epoll.la
 
 fibers/events-impl.scm: Makefile fibers/epoll.scm
-	ln -sf epoll.scm fibers/events-impl.scm
+	ln -sf $(abs_top_srcdir)/fibers/epoll.scm $(abs_top_builddir)/fibers/events-impl.scm
 endif
 endif
 
@@ -95,7 +95,7 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
 fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
-	ln -sf posix-clocks-$(PLATFORM).scm fibers/posix-clocks.scm
+	ln -sf $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
 CLEANFILES += fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
 
