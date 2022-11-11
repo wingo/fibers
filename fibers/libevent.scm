@@ -61,9 +61,10 @@
        (values read-pipe write-pipe)))))
 
 (define-record-type <libevt>
-  (make-libevt ls eventsv maxevents state wake-read-pipe wake-write-pipe)
+  (make-libevt ls added eventsv maxevents state wake-read-pipe wake-write-pipe)
   libevt?
   (ls libevt-ls set-libevt-ls!)
+  (added libevt-added)
   (eventsv libevt-eventsv set-libevt-eventsv!)
   (maxevents libevt-maxevents set-libevt-maxevents!)
   ;; atomic box of either 'waiting, 'not-waiting or 'dead
@@ -98,6 +99,7 @@
       (let* ((state (make-atomic-box 'not-waiting))
              (eventsv (make-bytevector (fd-offset (or maxevents 8))))
              (libevt (make-libevt (primitive-create-event-base eventsv)
+                                  (make-hash-table)
                                   eventsv maxevents state read-pipe write-pipe)))
         (libevt-guardian libevt)
         (libevt-add! libevt (fileno read-pipe) (logior EVREAD EVPERSIST))
@@ -111,8 +113,15 @@
     (close-port (libevt-wake-write-pipe libevt))
     (set-libevt-ls! libevt '())))
 
-(define* (libevt-add! libevt fd events)
-  (primitive-add-event (libevt-ls libevt) fd events))
+(define (libevt-add! libevt fd events)
+  (let ((event (primitive-add-event (libevt-ls libevt) fd events)))
+    (hashv-set! (libevt-added libevt) fd event)))
+
+(define (libevt-remove! libevt fd)
+  (let ((event (hashv-ref (libevt-added libevt) fd)))
+    (when event
+      (primitive-remove-event (libevt-ls libevt) event)
+      (hashv-remove! (libevt-added libevt) fd))))
 
 (define (libevt-wake! libevt)
   (match (atomic-box-ref (libevt-state libevt))
@@ -156,7 +165,7 @@
         (if (< i n)
             (let ((fd (bytevector-s32-native-ref eventsv (fd-offset i)))
                   (events (bytevector-s32-native-ref eventsv (event-offset i))))
-              (lp (folder fd events seed) (+ 1 i)))
+              (lp (folder fd events seed) (1+ i)))
             seed)))))
 
 ;; Corresponding events, compared to epoll, found at

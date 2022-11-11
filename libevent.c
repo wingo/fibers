@@ -46,11 +46,18 @@ struct loop_data
   int64_t timeout;
 };
 
-static void
-free_evb (void* ev)
+struct libevt_data
 {
-  struct event_base *base = ev;
-  event_base_free (base);
+  struct event_base *base;
+};
+
+
+static void
+free_libevt (void *ptr)
+{
+  struct libevt_data *libevt = ptr;
+  event_base_free (libevt->base);
+  free(libevt);
 }
 
 static void
@@ -91,11 +98,16 @@ static SCM
 scm_primitive_create_event_base (SCM eventsv)
 #define FUNC_NAME "primitive-create-event-base"
 {
-  struct event_base *base;
+  struct libevt_data *libevt;
   struct wait_data *data;
+  struct event_base *base;
 
   if ((base = event_base_new ()) == NULL)
     scm_syserror ("couldn't instantiate event_base");
+
+  libevt = (struct libevt_data *) scm_gc_malloc (sizeof (struct libevt_data),
+                                                 "libevt_data");
+  libevt->base = base;
 
   data = (struct wait_data *) scm_gc_malloc (sizeof (struct wait_data),
                                              "wait_data");
@@ -103,7 +115,7 @@ scm_primitive_create_event_base (SCM eventsv)
   data->events = (struct event_data *) SCM_BYTEVECTOR_CONTENTS (eventsv);
   data->maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (struct event_data);
 
-  return scm_list_2 (scm_from_pointer (base, free_evb),
+  return scm_list_2 (scm_from_pointer (libevt, free_libevt),
                      scm_from_pointer (data, NULL));
 }
 #undef FUNC_NAME
@@ -115,28 +127,34 @@ scm_primitive_add_event (SCM lst, SCM fd, SCM ev)
   int c_fd;
   short c_ev;
   struct event *event;
-  struct event_base *base;
   struct wait_data *data;
+  struct libevt_data *libevt;
 
   c_fd = scm_to_int (fd);
   c_ev = scm_to_short (ev);
 
-  base =
-    (struct event_base *) scm_to_pointer (scm_list_ref (lst, scm_from_int (0)));
+  libevt =
+    (struct libevt_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (0)));
   data =
     (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
 
-  if (c_ev & EV_PERSIST)
-    {
-      event = event_new (base, c_fd, c_ev, cb_func, data);
-      event_add (event, NULL);
-    }
-  else
-    event_base_once (base, c_fd, c_ev, cb_func, data, NULL);
+  event = event_new (libevt->base, c_fd, c_ev, cb_func, data);
+  event_add (event, NULL);
+
+  return scm_from_pointer (event, NULL);
+}
+#undef FUNC_NAME
+
+static SCM
+scm_primitive_remove_event (SCM lst, SCM scm_event)
+#define FUNC_NAME "primitive-remove-event"
+{
+  struct event *event = scm_to_pointer(scm_event);
+
+  event_del (event);
 
   return SCM_UNSPECIFIED;
 }
-
 #undef FUNC_NAME
 
 static uint64_t time_units_per_microsec;
@@ -179,8 +197,8 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
   c_wokefd = scm_to_int (wokefd);
   c_timeout = scm_to_int64 (timeout);
 
-  struct event_base *base =
-    (struct event_base *) scm_to_pointer (scm_list_ref (lst, scm_from_int (0)));
+  struct libevt_data *libevt =
+    (struct libevt_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (0)));
   struct wait_data *data =
     (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
 
@@ -193,7 +211,7 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
     data->rv = 0;
   else
     {
-      struct loop_data loop_data = { base, c_timeout };
+      struct loop_data loop_data = { libevt->base, c_timeout };
 
       if (c_timeout != 0)
         scm_without_guile (run_event_loop, &loop_data);
@@ -245,6 +263,8 @@ init_libevt (void)
                       scm_primitive_create_event_base);
   scm_c_define_gsubr ("primitive-add-event", 3, 0, 0,
                       scm_primitive_add_event);
+  scm_c_define_gsubr ("primitive-remove-event", 2, 0, 0,
+                      scm_primitive_remove_event);
   scm_c_define_gsubr ("primitive-event-loop", 4, 0, 0,
                       scm_primitive_event_loop);
 
