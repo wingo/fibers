@@ -59,14 +59,6 @@
    (guile-2 (lambda (v i) (bitvector-set! v i #t)))))
 ;; End of Guile 2 and 3 compatibility.
 
-(if is-osx?
-  (eval-when (eval load compile)
-  (dynamic-call "init_affinity"
-                (dynamic-link (extension-library "affinity"))))
-)
-
-(init-posix-clocks)
-
 (define (wait-for-readable port)
   (suspend-current-task
    (lambda (sched k)

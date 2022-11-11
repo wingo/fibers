@@ -25,8 +25,7 @@
   #:use-module (system foreign)
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
-  #:export (init-posix-clocks
-            clock-nanosleep
+  #:export (clock-nanosleep
             clock-getcpuclockid
             pthread-getcpuclockid
             pthread-self))
@@ -48,9 +47,6 @@
 (define CLOCK_MONOTONIC_RAW 4)
 (define CLOCK_REALTIME_COARSE 5)
 (define CLOCK_MONOTONIC_COARSE 6)
-
-(define init-posix-clocks
-  (lambda () *unspecified*))
 
 (define pthread-self
   (let* ((ptr (dynamic-pointer "pthread_self" exe))

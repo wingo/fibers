@@ -47,11 +47,9 @@
 (define CLOCK_PROCESS_CPUTIME_ID 12)
 (define CLOCK_THREAD_CPUTIME_ID 16)
 
-(define init-posix-clocks
-  (lambda ()
-    (eval-when (eval load compile)
-      (dynamic-call "init_affinity"
-                    (dynamic-link (extension-library "fibers-affinity"))))))
+(eval-when (eval load compile)
+  (dynamic-call "init_affinity"
+                (dynamic-link (extension-library "fibers-affinity"))))
 
 (define clock-getcpuclockid
   (lambda* (pid) CLOCK_PROCESS_CPUTIME_ID))
