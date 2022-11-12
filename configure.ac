@@ -35,7 +35,7 @@ LT_INIT([disable-static])
 
 AM_CONDITIONAL([CROSS_COMPILING], [test "x$cross_compiling" = "xyes"])
 
-if test "$cross_compiling" = "no"; then
+if test "x$cross_compiling" = "xno"; then
    GUILE_TARGET=""
 else
    GUILE_TARGET="--target=$host_alias"
@@ -44,35 +44,40 @@ AC_SUBST([GUILE_TARGET])
 
 WARN_CFLAGS=-Wall
 AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
-        [], WARN_CFLAGS="-Wall -Werror")
+    [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
 
 AC_ARG_WITH([libevent],
-        [AS_HELP_STRING([--with-libevent],
-                [use libevent for events backend  @<:@default=no@:>@])],
+    [AS_HELP_STRING([--with-libevent],
+        [use libevent for events backend  @<:@default=no@:>@])],
         [],
         [with_libevent=no])
 
-AS_IF([test "x$with_libevent" != xno],
-        [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],,
-                                       [AC_MSG_ERROR([unable to find libevent])])])
-AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = xyes])
+AS_IF([test "x$with_libevent" != "xno"],
+    [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],,
+        [AC_MSG_ERROR([unable to find libevent])])])
+AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = "xyes"])
 
 # Detect the target system
 case "$host_os" in
-     linux*)
+    linux*)
         build_linux=yes
         PLATFORM=linux
         ;;
-     darwin*)
+    darwin*)
         build_darwin=yes
         PLATFORM=darwin
         ;;
 esac
 
-AM_CONDITIONAL([DARWIN], [test "x$build_darwin" = xyes])
-AM_CONDITIONAL([LINUX], [test "x$build_linux" = xyes])
+AM_CONDITIONAL([DARWIN], [test "x$build_darwin" = "xyes"])
+AM_CONDITIONAL([LINUX], [test "x$build_linux" = "xyes"])
 AC_SUBST(PLATFORM)
+
+# Check if we have what we need for the detected platform.
+AS_IF([test "x$with_libevent" = "xno"],
+    [AS_IF([test "x$PLATFORM" = "xdarwin"],
+        [AC_MSG_ERROR([Native support not available, try --with-libevent=yes instead])])])
 
 #
 # Check for Guile
