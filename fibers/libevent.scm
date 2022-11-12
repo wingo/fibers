@@ -39,8 +39,11 @@
               EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
 
 (eval-when (eval load compile)
-  (dynamic-call "init_libevt"
-                (dynamic-link (extension-library "fibers-libevent"))))
+  ;; When cross-compiling, the cross-compiled 'fibers-libevent.so' cannot be
+  ;; loaded by the 'guild compile' process; skip it.
+  (unless (getenv "FIBERS_CROSS_COMPILING")
+    (dynamic-call "init_libevt"
+                  (dynamic-link (extension-library "fibers-libevent")))))
 
 
 (when (defined? 'EVREAD)
