@@ -72,6 +72,15 @@
     (lambda ()
       (proc))))
 
+(define clock-gettime
+  (let* ((ptr (dynamic-pointer "clock_gettime" exe))
+         (proc (pointer->procedure int ptr (list clockid-t '*)
+                                   #:return-errno? #t)))
+    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
+      (call-with-values (lambda () (proc clockid buf))
+        (lambda (ret errno)
+          (unless (zero? ret) (error (strerror errno)))
+          (timespec->nsec buf))))))
 (define (nsec->timespec nsec)
   (make-c-struct struct-timespec
                  (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
@@ -91,13 +100,3 @@
          ((zero? ret) (values #t 0))
          ((eqv? ret EINTR) (values #f (timespec->nsec buf)))
          (else (error (strerror ret))))))))
-
-(define clock-gettime
-  (let* ((ptr (dynamic-pointer "clock_gettime" exe))
-         (proc (pointer->procedure int ptr (list clockid-t '*)
-                                   #:return-errno? #t)))
-    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
-      (call-with-values (lambda () (proc clockid buf))
-        (lambda (ret errno)
-          (unless (zero? ret) (error (strerror errno)))
-          (timespec->nsec buf))))))
