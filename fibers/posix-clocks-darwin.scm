@@ -33,7 +33,20 @@
             getaffinity setaffinity))
 
 (define exe (dynamic-link))
-(define exe-clocks (dynamic-link (extension-library "fibers-darwin-clocks")))
+
+(define exe-clocks
+  (eval-when (eval load compile)
+    ;; When cross-compiling, the cross-compiled 'fibers-clocks-darwin.so' cannot
+    ;; be loaded by the 'guild compile' process; skip it.
+    (unless (getenv "FIBERS_CROSS_COMPILING")
+      (dynamic-link (extension-library "fibers-clocks-darwin")))))
+
+(eval-when (eval load compile)
+  ;; When cross-compiling, the cross-compiled 'fibers-affinity.so' cannot be
+  ;; loaded by the 'guild compile' process; skip it.
+  (unless (getenv "FIBERS_CROSS_COMPILING")
+    (dynamic-call "init_affinity"
+                  (dynamic-link (extension-library "fibers-affinity")))))
 
 (define clockid-t int32)
 (define time-t long)
@@ -46,10 +59,6 @@
 (define CLOCK_MONOTONIC 6)
 (define CLOCK_PROCESS_CPUTIME_ID 12)
 (define CLOCK_THREAD_CPUTIME_ID 16)
-
-(eval-when (eval load compile)
-  (dynamic-call "init_affinity"
-                (dynamic-link (extension-library "fibers-affinity"))))
 
 (define clock-getcpuclockid
   (lambda* (pid) CLOCK_PROCESS_CPUTIME_ID))
