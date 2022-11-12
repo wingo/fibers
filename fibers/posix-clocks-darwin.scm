@@ -2,7 +2,7 @@
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
-;;;; Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+;;;; Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -73,7 +73,7 @@
      (+ (* sec #e1e9) nsec))))
 
 (define clock-nanosleep
-  (let* ((ptr (dynamic-pointer "clock_nanosleep" exe-clocks))
+  (let* ((ptr (dynamic-pointer "_fibers_clock_nanosleep" exe-clocks))
          (proc (pointer->procedure int ptr (list clockid-t int '* '*))))
     (lambda* (clockid nsec #:key absolute? (buf (nsec->timespec nsec)))
       (let* ((flags (if absolute? TIMER_ABSTIME 0))

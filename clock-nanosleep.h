@@ -1,4 +1,4 @@
-/* Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+/* Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -16,16 +16,12 @@
  * 02110-1301 USA
  */
 
-#ifndef CLOCK_NANOSLEEP_H
-#define CLOCK_NANOSLEEP_H
+#ifndef FIBERS_CLOCK_NANOSLEEP_H
+#define FIBERS_CLOCK_NANOSLEEP_H
 
 #include <time.h>
 
-#ifndef TIMER_ABSTIME
-#define TIMER_ABSTIME 1
-#endif // TIMER_ABSTIME
+int _fibers_clock_nanosleep (clockid_t id, int flags, const struct timespec *ts,
+                             struct timespec *ots);
 
-int clock_nanosleep (clockid_t id, int flags, const struct timespec *ts,
-                     struct timespec *ots);
-
-#endif // CLOCK_NANOSLEEP_H
+#endif // FIBERS_CLOCK_NANOSLEEP_H

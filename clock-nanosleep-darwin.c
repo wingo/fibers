@@ -1,4 +1,4 @@
-/* Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+/* Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -16,14 +16,14 @@
  * 02110-1301 USA
  */
 
-#include "clock_nanosleep.h"
+#include "clock-nanosleep.h"
 
 #include <errno.h>
 #include <time.h>
 
 int
-clock_nanosleep(clockid_t id, int flags, const struct timespec *ts,
-                struct timespec *ots)
+_fibers_clock_nanosleep(clockid_t id, int flags, const struct timespec *ts,
+                        struct timespec *ots)
 {
   int ret = nanosleep(ts, ots);
   return ret ? errno : 0;
