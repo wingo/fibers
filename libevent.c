@@ -172,6 +172,22 @@ scm_primitive_remove_event (SCM lst, SCM scm_event)
 }
 #undef FUNC_NAME
 
+static SCM
+scm_primitive_resize (SCM lst, SCM eventsv)
+#define FUNC_NAME "primitive-resize"
+{
+  struct wait_data *data;
+
+  data =
+    (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
+
+  data->events = (struct event_data *) SCM_BYTEVECTOR_CONTENTS (eventsv);
+  data->maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (struct event_data);
+
+  return SCM_UNSPECIFIED;
+}
+#undef FUNC_NAME
+
 static uint64_t time_units_per_microsec;
 
 static void*
@@ -280,6 +296,8 @@ init_libevt (void)
                       scm_primitive_add_event);
   scm_c_define_gsubr ("primitive-remove-event", 2, 0, 0,
                       scm_primitive_remove_event);
+  scm_c_define_gsubr ("primitive-resize", 2, 0, 0,
+                      scm_primitive_resize);
   scm_c_define_gsubr ("primitive-event-loop", 4, 0, 0,
                       scm_primitive_event_loop);
 

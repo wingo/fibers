@@ -68,7 +68,7 @@
   (make-libevt ls added eventsv maxevents state wake-read-pipe wake-write-pipe)
   libevt?
   (ls libevt-ls set-libevt-ls!)
-  (added libevt-added)
+  (added libevt-added set-libevt-added!)
   (eventsv libevt-eventsv set-libevt-eventsv!)
   (maxevents libevt-maxevents set-libevt-maxevents!)
   ;; atomic box of either 'waiting, 'not-waiting or 'dead
@@ -115,11 +115,20 @@
     (close-port (libevt-wake-read-pipe libevt))
     ;; FIXME: ignore errors flushing output
     (close-port (libevt-wake-write-pipe libevt))
-    (set-libevt-ls! libevt '())))
+    (set-libevt-ls! libevt '())
+    (set-libevt-added! libevt (make-hash-table))))
 
 (define (libevt-add! libevt fd events)
-  (let ((event (primitive-add-event (libevt-ls libevt) fd events)))
-    (hashv-set! (libevt-added libevt) fd event)))
+  (let ((len (hash-count (const #t) (libevt-added libevt)))
+        (maxevents (libevt-maxevents libevt)))
+    ;; If we reach the limit we need to resize out events vector, so we double
+    ;; the size.
+    (when (>= maxevents len)
+      (set-libevt-eventsv! libevt (make-bytevector (fd-offset (* maxevents 2))))
+      (primitive-resize (libevt-ls libevt) (libevt-eventsv libevt)))
+    ;; Time to add the event.
+    (let ((event (primitive-add-event (libevt-ls libevt) fd events)))
+      (hashv-set! (libevt-added libevt) fd event))))
 
 (define (libevt-remove! libevt fd)
   (let ((event (hashv-ref (libevt-added libevt) fd)))
