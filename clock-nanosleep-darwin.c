@@ -20,11 +20,61 @@
 
 #include <errno.h>
 #include <time.h>
+#include <sys/types.h>
+
+/**
+ * The code below has been extracted from the following notcurses files:
+ *
+ * https://github.com/dankamongmen/notcurses
+ *
+ *   src/compat/compat.c
+ *   src/compat/compat.h
+ */
+
+#define NANOSECS_IN_SEC 1000000000ul
+
+#ifdef __APPLE__
+#define TIMER_ABSTIME 1
+#endif
+
+static inline uint64_t
+timespec_to_ns (const struct timespec *ts)
+{
+  return ts->tv_sec * NANOSECS_IN_SEC + ts->tv_nsec;
+}
 
 int
-_fibers_clock_nanosleep(clockid_t id, int flags, const struct timespec *ts,
-                        struct timespec *ots)
+_fibers_clock_nanosleep (clockid_t clockid, int flags, const struct timespec *request,
+                         struct timespec *remain)
 {
-  int ret = nanosleep(ts, ots);
-  return ret ? errno : 0;
+  struct timespec now;
+
+  if(clock_gettime(clockid, &now))
+    {
+      return -1;
+    }
+
+  uint64_t nowns = timespec_to_ns(&now);
+  uint64_t targns = timespec_to_ns(request);
+
+  if(flags != TIMER_ABSTIME)
+    {
+      targns += nowns;
+    }
+
+  if(nowns < targns)
+    {
+      uint64_t waitns = targns - nowns;
+
+      struct timespec waitts =
+        {
+          .tv_sec = waitns / 1000000000,
+          .tv_nsec = waitns % 1000000000,
+        };
+
+      return nanosleep(&waitts, remain);
+    }
+
+  return 0;
+
 }

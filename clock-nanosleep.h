@@ -21,7 +21,7 @@
 
 #include <time.h>
 
-int _fibers_clock_nanosleep (clockid_t id, int flags, const struct timespec *ts,
-                             struct timespec *ots);
+int _fibers_clock_nanosleep (clockid_t clockid, int flags, const struct timespec *request,
+                             struct timespec *remain);
 
 #endif // FIBERS_CLOCK_NANOSLEEP_H
