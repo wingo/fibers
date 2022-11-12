@@ -73,9 +73,17 @@ cb_func (evutil_socket_t fd, short what, void *arg)
   struct wait_data* data = arg;
   int rv = data->rv;
 
-  if (rv == data->maxevents)
+  // In theory, we should never exceed the maximum number of events. This is
+  // because every time we add a new FD to monitor we check if we have enough
+  // room in our vector and if not we resize it. So, if this condition is true
+  // is because those assumptions are wrong and we might be doing something
+  // funky.
+  if (rv >= data->maxevents)
     {
-      fprintf (stderr, "max events fired on [%d], ignoring.\n", fd);
+      scm_puts ("fibers-libevent[ERROR]: ", scm_current_error_port ());
+      scm_puts ("max events fired on [", scm_current_error_port ());
+      scm_display (scm_from_int(fd), scm_current_error_port ());
+      scm_puts ("], ignoring.\n", scm_current_error_port ());
       return;
     }
 

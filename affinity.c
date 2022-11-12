@@ -1,5 +1,5 @@
 /* Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
- * Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+ * Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -56,7 +56,9 @@ int sched_getaffinity(size_t cpu_size, cpu_set_t *cpu_set)
 
   if (ret)
     {
-      printf("Error while get core count: %d\n", ret);
+      scm_puts ("fibers-affinity[ERROR]: error getting core count: ", scm_current_error_port ());
+      scm_display (scm_from_int(ret), scm_current_error_port ());
+      scm_puts ("\n", scm_current_error_port ());
       return -1;
     }
 
@@ -134,7 +136,9 @@ static SCM scm_primitive_set_affinity (SCM id, SCM mask)
   int ret = pthread_setaffinity_np (sizeof (cpu_set_t), &cs);
   if (ret)
     {
-      printf("Error setting affinity: %d\n", ret);
+      scm_puts ("fibers-affinity[ERROR]: error setting affinity: ", scm_current_error_port ());
+      scm_display (scm_from_int(ret), scm_current_error_port ());
+      scm_puts ("\n", scm_current_error_port ());
     }
 
   return SCM_UNSPECIFIED;
