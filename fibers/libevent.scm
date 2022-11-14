@@ -36,7 +36,7 @@
               events-impl-fd-finalizer
               events-impl-run
 
-              EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
+              EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_CLOSED_OR_ERROR))
 
 (eval-when (eval load compile)
   ;; When cross-compiling, the cross-compiled 'fibers-libevent.so' cannot be
@@ -186,7 +186,7 @@
 ;; https://github.com/libevent/libevent/blob/master/epoll.c
 (define EVENTS_IMPL_READ (logior EVREAD EVCLOSED))
 (define EVENTS_IMPL_WRITE EVWRITE)
-(define EVENTS_IMPL_ERROR (logior EVREAD EVWRITE))
+(define EVENTS_IMPL_CLOSED_OR_ERROR (logior EVREAD EVWRITE))
 
 (define events-impl-create libevt-create)
 

@@ -36,7 +36,7 @@
             events-impl-fd-finalizer
             events-impl-run
 
-            EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_ERROR))
+            EVENTS_IMPL_READ EVENTS_IMPL_WRITE EVENTS_IMPL_CLOSED_OR_ERROR))
 
 (eval-when (eval load compile)
   ;; When cross-compiling, the cross-compiled 'fibers-epoll.so' cannot be loaded
@@ -194,7 +194,7 @@ epoll wait (if appropriate)."
 
 (define EVENTS_IMPL_READ (logior EPOLLIN EPOLLRDHUP))
 (define EVENTS_IMPL_WRITE EPOLLOUT)
-(define EVENTS_IMPL_ERROR (logior EPOLLHUP EPOLLERR))
+(define EVENTS_IMPL_CLOSED_OR_ERROR (logior EPOLLHUP EPOLLERR))
 
 (define events-impl-create epoll-create)
 

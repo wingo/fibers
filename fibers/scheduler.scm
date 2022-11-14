@@ -187,14 +187,14 @@ remote kernel thread."
      ;; finalizer on FD.
      (set-car! events+waiters 0)
      (set-cdr! events+waiters '())
-     (unless (zero? (logand revents EVENTS_IMPL_ERROR))
+     (unless (zero? (logand revents EVENTS_IMPL_CLOSED_OR_ERROR))
        (hashv-remove! (scheduler-fd-waiters sched) fd))
      ;; Now resume or re-schedule waiters, as appropriate.
      (let lp ((waiters waiters))
        (match waiters
          (() #f)
          (((events . task) . waiters)
-          (if (zero? (logand revents (logior events EVENTS_IMPL_ERROR)))
+          (if (zero? (logand revents (logior events EVENTS_IMPL_CLOSED_OR_ERROR)))
               ;; Re-schedule.
               (schedule-task-when-fd-active sched fd events task)
               ;; Resume.
