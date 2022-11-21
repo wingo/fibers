@@ -1,21 +1,21 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016 Free Software Foundation, Inc.
-;;;; 
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
+;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public
 ;;;; License along with this library; if not, write to the Free Software
 ;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-;;;; 
+;;;;
 
 (define-module (fibers)
   #:use-module (ice-9 match)
@@ -30,6 +30,33 @@
   #:use-module (ice-9 suspendable-ports)
   #:export (run-fibers spawn-fiber)
   #:re-export (sleep))
+
+;; Guile 2 and 3 compatibility. Some bit vector related procedures were
+;; deprecated in Guile 3.0.3 and new ones were defined.
+(define bitvector-count*
+  (cond-expand
+   (guile-3
+    (if (defined? 'bitvector-count)
+        bitvector-count
+        (lambda (v) (bit-count #t v))))
+   (guile-2 (lambda (v) (bit-count #t v)))))
+
+(define bitvector-position*
+  (cond-expand
+   (guile-3
+    (if (defined? 'bitvector-position)
+        bitvector-position
+        (lambda (v b i) (bit-position b v i))))
+   (guile-2 (lambda (v b i) (bit-position b v i)))))
+
+(define bitvector-set-bit!*
+  (cond-expand
+   (guile-3
+    (if (defined? 'bitvector-set-bit!)
+        bitvector-set-bit!
+        (lambda (v i) (bitvector-set! v i #t))))
+   (guile-2 (lambda (v i) (bitvector-set! v i #t)))))
+;; End of Guile 2 and 3 compatibility.
 
 (define (wait-for-readable port)
   (suspend-current-task
@@ -86,13 +113,13 @@
     (make-list parallelism group-affinity))
   (define (one-thread-per-cpu)
     (let lp ((cpu 0))
-      (match (bit-position #t group-affinity cpu)
+      (match (bitvector-position* group-affinity #t cpu)
         (#f '())
         (cpu (let ((affinity
                     (make-bitvector (bitvector-length group-affinity) #f)))
-               (bitvector-set! affinity cpu #t)
+               (bitvector-set-bit!* affinity cpu)
                (cons affinity (lp (1+ cpu))))))))
-  (let ((cpu-count (bit-count #t group-affinity)))
+  (let ((cpu-count (bitvector-count* group-affinity)))
     (if (eq? parallelism cpu-count)
         (one-thread-per-cpu)
         (each-thread-has-group-affinity))))
