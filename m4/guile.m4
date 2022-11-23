@@ -17,7 +17,7 @@
 ## Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 ## 02110-1301 USA
 
-# serial 10
+# serial 11
 
 ## Index
 ## -----
@@ -295,15 +295,15 @@ AC_DEFUN([GUILE_PROGS],
   fi
   AC_MSG_RESULT([$_guile_prog_version])
 
-  AC_PATH_PROG(GUILD,[guild$_guile_suffix])
+  AC_PATH_PROGS(GUILD,[guild$_guile_suffix guild])
   AC_SUBST(GUILD)
 
-  AC_PATH_PROG(GUILE_CONFIG,[guile-config$_guile_suffix])
+  AC_PATH_PROGS(GUILE_CONFIG,[guile-config$_guile_suffix guile-config])
   AC_SUBST(GUILE_CONFIG)
   if test -n "$GUILD"; then
     GUILE_TOOLS=$GUILD
   else
-    AC_PATH_PROG(GUILE_TOOLS,[guile-tools$_guile_suffix])
+    AC_PATH_PROGS(GUILE_TOOLS,[guile-tools$_guile_suffix guile-tools])
   fi
   AC_SUBST(GUILE_TOOLS)
  ])
