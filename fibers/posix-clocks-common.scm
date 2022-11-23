@@ -2,7 +2,7 @@
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
-;;;; Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+;;;; Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,6 @@
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
   #:export (clock-nanosleep
-            clock-getcpuclockid
             pthread-getcpuclockid
             pthread-self))
 
@@ -54,16 +53,6 @@
     (lambda ()
       (proc))))
 
-(define clock-getcpuclockid
-  (let* ((ptr (dynamic-pointer "clock_getcpuclockid" exe))
-         (proc (pointer->procedure int ptr (list pid-t '*)
-                                   #:return-errno? #t)))
-    (lambda* (pid #:optional (buf (make-bytevector (sizeof clockid-t))))
-      (call-with-values (lambda () (proc pid (bytevector->pointer buf)))
-        (lambda (ret errno)
-          (unless (zero? ret) (error (strerror errno)))
-          (bytevector-s32-native-ref buf 0))))))
-
 (define pthread-getcpuclockid
   (let* ((ptr (dynamic-pointer "pthread_getcpuclockid" exe))
          (proc (pointer->procedure int ptr (list pthread-t '*)
@@ -74,15 +63,14 @@
           (unless (zero? ret) (error (strerror errno)))
           (bytevector-s32-native-ref buf 0))))))
 
-(define clock-getres
-  (let* ((ptr (dynamic-pointer "clock_getres" exe))
-         (proc (pointer->procedure int ptr (list clockid-t '*)
-                                   #:return-errno? #t)))
-    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
-      (call-with-values (lambda () (proc clockid buf))
-        (lambda (ret errno)
-          (unless (zero? ret) (error (strerror errno)))
-          (timespec->nsec buf))))))
+(define (nsec->timespec nsec)
+  (make-c-struct struct-timespec
+                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
+
+(define (timespec->nsec ts)
+  (match (parse-c-struct ts struct-timespec)
+    ((sec nsec)
+     (+ (* sec #e1e9) nsec))))
 
 (define clock-gettime
   (let* ((ptr (dynamic-pointer "clock_gettime" exe))
@@ -93,15 +81,6 @@
         (lambda (ret errno)
           (unless (zero? ret) (error (strerror errno)))
           (timespec->nsec buf))))))
-
-(define (nsec->timespec nsec)
-  (make-c-struct struct-timespec
-                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
-
-(define (timespec->nsec ts)
-  (match (parse-c-struct ts struct-timespec)
-    ((sec nsec)
-     (+ (* sec #e1e9) nsec))))
 
 (define clock-nanosleep
   (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))

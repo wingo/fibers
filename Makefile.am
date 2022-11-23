@@ -64,7 +64,7 @@ $(GOBJECTS): fibers-libevent.la
 fibers/events-impl.scm: Makefile fibers/libevent.scm
 	ln -sf $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/fibers/events-impl.scm
 else
-if LINUX
+if HAVE_EPOLL_WAIT
 extlib_LTLIBRARIES += fibers-epoll.la
 fibers_epoll_la_SOURCES = epoll.c
 fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
@@ -94,8 +94,8 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
-	ln -sf $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
+fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(CLOCKS_PLATFORM).scm
+	ln -sf $(abs_top_srcdir)/fibers/posix-clocks-$(CLOCKS_PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
 CLEANFILES += fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
 
@@ -109,9 +109,9 @@ TESTS = \
 	tests/preemption.scm \
 	tests/speedup.scm
 
-# On macOS we are missing SOCK_NONBLOCK and SOCK_CLOEXEC, so for now we only
-# include those tests in Linux.
-if LINUX
+# On macOS we are missing SOCK_NONBLOCK and SOCK_CLOEXEC, so we avoid the
+# following tests for now.
+if !DARWIN
 TESTS += \
         tests/ports.scm \
 	tests/concurrent-web-server.scm
@@ -124,7 +124,7 @@ EXTRA_DIST += \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
-	fibers/posix-clocks-linux.scm \
+	fibers/posix-clocks-common.scm \
 	fibers/posix-clocks-darwin.scm \
 	HACKING \
         COPYING.LESSER \

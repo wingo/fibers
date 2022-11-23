@@ -47,6 +47,9 @@ AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build 
     [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
 
+AC_CHECK_FUNCS(epoll_wait)
+AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test x"$ac_cv_func_epoll_wait" = "xyes"])
+
 AC_ARG_WITH([libevent],
     [AS_HELP_STRING([--with-libevent],
         [use libevent for events backend  @<:@default=no@:>@])],
@@ -60,23 +63,21 @@ AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = "xyes"])
 
 # Detect the target system
 case "$host_os" in
-    linux*)
-        build_linux=yes
-        PLATFORM=linux
-        ;;
-    darwin*)
+    *darwin*)
         build_darwin=yes
-        PLATFORM=darwin
+        CLOCKS_PLATFORM=darwin
+        ;;
+    *linux*|*netbsd*)
+        CLOCKS_PLATFORM=common
         ;;
 esac
 
 AM_CONDITIONAL([DARWIN], [test "x$build_darwin" = "xyes"])
-AM_CONDITIONAL([LINUX], [test "x$build_linux" = "xyes"])
-AC_SUBST(PLATFORM)
+AC_SUBST(CLOCKS_PLATFORM)
 
 # Check if we have what we need for the detected platform.
 AS_IF([test "x$with_libevent" = "xno"],
-    [AS_IF([test "x$PLATFORM" = "xdarwin"],
+    [AS_IF([test x"$ac_cv_func_epoll_wait" = "xno"],
         [AC_MSG_ERROR([Native support not available, try --with-libevent=yes instead])])])
 
 #
