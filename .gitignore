@@ -18,6 +18,8 @@ build/
 /config.log
 /config.status
 /configure
+/configure~
+/configure.ac~
 /env
 /libtool
 /m4/libtool.m4
