@@ -63,6 +63,8 @@ Manual: https://github.com/wingo/fibers/wiki/Manual
 
 Guile 2.1.7 or newer (https://www.gnu.org/software/guile/).
 
+If you build from source you also need `autoconf`, `automake` and `libtool`.
+
 
 ## Installation quickstart
 
