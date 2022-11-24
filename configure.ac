@@ -48,7 +48,7 @@ AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build 
 AC_SUBST(WARN_CFLAGS)
 
 AC_CHECK_FUNCS(epoll_wait)
-AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test x"$ac_cv_func_epoll_wait" = "xyes"])
+AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test "x$ac_cv_func_epoll_wait" = "xyes"])
 
 AC_ARG_WITH([libevent],
     [AS_HELP_STRING([--with-libevent],
@@ -64,16 +64,25 @@ AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = "xyes"])
 # Detect the target system
 case "$host_os" in
     *darwin*)
-        build_darwin=yes
+        needs_clocks_ext=yes
+        needs_affinity_ext=yes
         CLOCKS_PLATFORM=darwin
+        AFFINITY_PLATFORM=darwin
         ;;
-    *linux*|*netbsd*)
+    *linux*)
+        needs_clocks_ext=no
+        needs_affinity_ext=no
         CLOCKS_PLATFORM=linux
+        # The guile value just means we get getaffinity/setaffinity from Guile
+        # itself but the actual value won't be used when building.
+        AFFINITY_PLATFORM=guile
         ;;
 esac
 
-AM_CONDITIONAL([DARWIN], [test "x$build_darwin" = "xyes"])
+AM_CONDITIONAL([NEEDS_CLOCKS_EXT], [test "x$needs_clocks_ext" = "xyes"])
+AM_CONDITIONAL([NEEDS_AFFINITY_EXT], [test "x$needs_affinity_ext" = "xyes"])
 AC_SUBST(CLOCKS_PLATFORM)
+AC_SUBST(AFFINITY_PLATFORM)
 
 # Check if we have what we need for the detected platform.
 AS_IF([test "x$with_libevent" = "xno"],

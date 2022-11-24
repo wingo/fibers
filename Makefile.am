@@ -79,14 +79,16 @@ fibers/events-impl.scm: Makefile fibers/epoll.scm
 endif
 endif
 
-if DARWIN
+if NEEDS_AFFINITY_EXT
 extlib_LTLIBRARIES += fibers-affinity.la
-fibers_affinity_la_SOURCES = affinity-darwin.c
+fibers_affinity_la_SOURCES = affinity-$(AFFINITY_PLATFORM).c
 fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
+endif
 
+if NEEDS_CLOCKS_EXT
 extlib_LTLIBRARIES += fibers-clocks.la
-fibers_clocks_la_SOURCES = clock-nanosleep-darwin.c
+fibers_clocks_la_SOURCES = clock-nanosleep-$(CLOCKS_PLATFORM).c
 fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 fibers_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
@@ -111,9 +113,9 @@ TESTS = \
 	tests/preemption.scm \
 	tests/speedup.scm
 
-# On macOS we are missing SOCK_NONBLOCK and SOCK_CLOEXEC, so we avoid the
-# following tests for now.
-if !DARWIN
+# The following tests require SOCK_NONBLOCK and SOCK_CLOEXEC. For now we just
+# run them on Linux.
+if HAVE_EPOLL_WAIT
 TESTS += \
         tests/ports.scm \
 	tests/concurrent-web-server.scm
