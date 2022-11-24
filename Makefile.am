@@ -47,7 +47,10 @@ SOURCES = \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
-BUILT_SOURCES = fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
+BUILT_SOURCES = \
+	fibers/config.scm \
+	fibers/posix-clocks.scm \
+	fibers/events-impl.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
@@ -79,14 +82,14 @@ endif
 
 if DARWIN
 extlib_LTLIBRARIES += fibers-affinity.la
-fibers_affinity_la_SOURCES = affinity.c
+fibers_affinity_la_SOURCES = affinity-darwin.c
 fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
 fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 
-extlib_LTLIBRARIES += fibers-clocks-darwin.la
-fibers_clocks_darwin_la_SOURCES = clock-nanosleep-darwin.c
-fibers_clocks_darwin_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
-fibers_clocks_darwin_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
+extlib_LTLIBRARIES += fibers-clocks.la
+fibers_clocks_la_SOURCES = clock-nanosleep-darwin.c
+fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
 
 fibers/config.scm: Makefile fibers/config.scm.in
