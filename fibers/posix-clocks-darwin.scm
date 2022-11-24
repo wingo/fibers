@@ -29,24 +29,16 @@
             clock-nanosleep
             clock-getcpuclockid
             pthread-getcpuclockid
-            pthread-self
-            getaffinity setaffinity))
+            pthread-self))
 
 (define exe (dynamic-link))
 
 (define exe-clocks
   (eval-when (eval load compile)
-    ;; When cross-compiling, the cross-compiled 'fibers-clocks-darwin.so' cannot
+    ;; When cross-compiling, the cross-compiled 'fibers-clocks.so' cannot
     ;; be loaded by the 'guild compile' process; skip it.
     (unless (getenv "FIBERS_CROSS_COMPILING")
-      (dynamic-link (extension-library "fibers-clocks-darwin")))))
-
-(eval-when (eval load compile)
-  ;; When cross-compiling, the cross-compiled 'fibers-affinity.so' cannot be
-  ;; loaded by the 'guild compile' process; skip it.
-  (unless (getenv "FIBERS_CROSS_COMPILING")
-    (dynamic-call "init_affinity"
-                  (dynamic-link (extension-library "fibers-affinity")))))
+      (dynamic-link (extension-library "fibers-clocks")))))
 
 (define clockid-t int32)
 (define time-t long)

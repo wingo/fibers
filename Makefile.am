@@ -33,12 +33,11 @@ SOURCES = \
 	fibers/config.scm \
 	fibers/counter.scm \
 	fibers/deque.scm \
-	fibers/events-impl.scm \
 	fibers/interrupts.scm \
 	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
-	fibers/posix-clocks.scm \
+	fibers/affinity.scm \
 	fibers/psq.scm \
 	fibers/scheduler.scm \
 	fibers/stack.scm \
@@ -127,7 +126,7 @@ EXTRA_DIST += \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
-	fibers/posix-clocks-common.scm \
+	fibers/posix-clocks-linux.scm \
 	fibers/posix-clocks-darwin.scm \
 	HACKING \
         COPYING.LESSER \

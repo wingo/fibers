@@ -68,7 +68,7 @@ case "$host_os" in
         CLOCKS_PLATFORM=darwin
         ;;
     *linux*|*netbsd*)
-        CLOCKS_PLATFORM=common
+        CLOCKS_PLATFORM=linux
         ;;
 esac
 
