@@ -24,7 +24,7 @@
 (define-module (fibers affinity)
   #:use-module (system foreign)
   #:use-module (fibers config)
-  #:re-export (getaffinity setaffinity))
+  #:export (getaffinity* setaffinity*))
 
 (eval-when (eval load compile)
   (unless (defined? 'getaffinity)
@@ -34,4 +34,9 @@
       (catch #t
         (lambda ()
           (dynamic-call "init_affinity" (dynamic-link (extension-library "fibers-affinity"))))
-        (lambda _ (error "Unable to load fibers-affinity library"))))))
+        (lambda _ (error "Ooops, getaffinity/setaffinity are not available in this platform and we were \
+unable to load fibers-affinity extension."))))))
+
+;; getaffinity/setaffinity should be loaded at this point.
+(define getaffinity* (if (defined? 'getaffinity) getaffinity))
+(define setaffinity* (if (defined? 'setaffinity) setaffinity))

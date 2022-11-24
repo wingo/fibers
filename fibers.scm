@@ -73,11 +73,11 @@
   (let ((saved #f))
     (dynamic-wind
       (lambda ()
-        (set! saved (getaffinity 0))
-        (setaffinity 0 affinity))
+        (set! saved (getaffinity* 0))
+        (setaffinity* 0 affinity))
       (lambda () exp ...)
       (lambda ()
-        (setaffinity 0 saved)))))
+        (setaffinity* 0 saved)))))
 
 (define (%run-fibers scheduler hz finished? affinity)
   (with-affinity
@@ -129,7 +129,7 @@
 (define* (run-fibers #:optional (init #f)
                      #:key (hz 100) (scheduler #f)
                      (parallelism (current-processor-count))
-                     (cpus (getaffinity 0))
+                     (cpus (getaffinity* 0))
                      (install-suspendable-ports? #t)
                      (drain? #f))
   (when install-suspendable-ports? (install-suspendable-ports!))
