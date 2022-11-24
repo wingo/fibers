@@ -124,16 +124,17 @@ endif
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
+	$(bin_SCRIPTS) \
+	$(TESTS) \
 	env.in \
+	HACKING \
+        COPYING.LESSER \
+	README.md \
+	TODO.md \
+	clock-nanosleep.h \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
 	fibers/posix-clocks-linux.scm \
 	fibers/posix-clocks-darwin.scm \
-	HACKING \
-        COPYING.LESSER \
-	README.md \
-	TODO.md \
-	$(bin_SCRIPTS) \
-	$(TESTS) \
 	examples
