@@ -25,7 +25,7 @@ AC_INIT([fibers],[1.1.1])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIRS([m4])
-AM_INIT_AUTOMAKE([serial-tests -Werror foreign])
+AM_INIT_AUTOMAKE([subdir-objects serial-tests -Werror foreign])
 AC_COPYRIGHT(FIBERS_CONFIGURE_COPYRIGHT)
 AC_CONFIG_HEADERS([config.h])
 
@@ -66,23 +66,18 @@ case "$host_os" in
     *darwin*)
         needs_clocks_ext=yes
         needs_affinity_ext=yes
-        CLOCKS_PLATFORM=darwin
-        AFFINITY_PLATFORM=darwin
+        PLATFORM=darwin
         ;;
     *linux*)
         needs_clocks_ext=no
         needs_affinity_ext=no
-        CLOCKS_PLATFORM=linux
-        # The guile value just means we get getaffinity/setaffinity from Guile
-        # itself but the actual value won't be used when building.
-        AFFINITY_PLATFORM=guile
+        PLATFORM=linux
         ;;
 esac
 
 AM_CONDITIONAL([NEEDS_CLOCKS_EXT], [test "x$needs_clocks_ext" = "xyes"])
 AM_CONDITIONAL([NEEDS_AFFINITY_EXT], [test "x$needs_affinity_ext" = "xyes"])
-AC_SUBST(CLOCKS_PLATFORM)
-AC_SUBST(AFFINITY_PLATFORM)
+AC_SUBST(PLATFORM)
 
 # Check if we have what we need for the detected platform.
 AS_IF([test "x$with_libevent" = "xno"],

@@ -1,5 +1,6 @@
-/.deps
-/.libs
+.deps
+.libs
+.dirstamp
 build/
 /INSTALL
 /Makefile

@@ -58,8 +58,8 @@ extlib_LTLIBRARIES =
 
 if WITH_LIBEVENT
 extlib_LTLIBRARIES += fibers-libevent.la
-fibers_libevent_la_SOURCES = libevent.c
-fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS)
+fibers_libevent_la_SOURCES = extensions/libevent.c
+fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS) -Iextensions
 fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
 $(GOBJECTS): fibers-libevent.la
 
@@ -68,8 +68,8 @@ fibers/events-impl.scm: Makefile fibers/libevent.scm
 else
 if HAVE_EPOLL_WAIT
 extlib_LTLIBRARIES += fibers-epoll.la
-fibers_epoll_la_SOURCES = epoll.c
-fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_epoll_la_SOURCES = extensions/epoll.c
+fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
 fibers_epoll_la_LIBADD = $(GUILE_LIBS)
 fibers_epoll_la_LDFLAGS = -export-dynamic -module
 $(GOBJECTS): fibers-epoll.la
@@ -81,15 +81,15 @@ endif
 
 if NEEDS_AFFINITY_EXT
 extlib_LTLIBRARIES += fibers-affinity.la
-fibers_affinity_la_SOURCES = affinity-$(AFFINITY_PLATFORM).c
-fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_affinity_la_SOURCES = extensions/$(PLATFORM)/affinity.c
+fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
 fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
 
 if NEEDS_CLOCKS_EXT
 extlib_LTLIBRARIES += fibers-clocks.la
-fibers_clocks_la_SOURCES = clock-nanosleep-$(CLOCKS_PLATFORM).c
-fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
+fibers_clocks_la_SOURCES = extensions/$(PLATFORM)/clock-nanosleep.c
+fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
 fibers_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
 
@@ -98,8 +98,8 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(CLOCKS_PLATFORM).scm
-	ln -sf $(abs_top_srcdir)/fibers/posix-clocks-$(CLOCKS_PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
+fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
+	ln -sf $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
 CLEANFILES += fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
 
@@ -131,10 +131,16 @@ EXTRA_DIST += \
         COPYING.LESSER \
 	README.md \
 	TODO.md \
-	clock-nanosleep.h \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
 	fibers/posix-clocks-linux.scm \
 	fibers/posix-clocks-darwin.scm \
 	examples
+
+# List all platform extension files here.
+EXTRA_DIST += \
+	extensions/darwin/affinity.c \
+	extensions/darwin/clock-nanosleep.c \
+	extensions/linux/affinity.c \
+	extensions/linux/clock-nanosleep.c
