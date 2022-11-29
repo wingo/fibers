@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
- * Copyright (C) 2020 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+ * Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -284,7 +284,7 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
 #undef FUNC_NAME
 
 void
-init_libevt (void)
+init_fibers_libevt (void)
 {
   time_units_per_microsec = scm_c_time_units_per_second / 1000000;
 

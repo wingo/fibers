@@ -42,16 +42,9 @@
   ;; When cross-compiling, the cross-compiled 'fibers-libevent.so' cannot be
   ;; loaded by the 'guild compile' process; skip it.
   (unless (getenv "FIBERS_CROSS_COMPILING")
-    (dynamic-call "init_libevt"
+    (dynamic-call "init_fibers_libevt"
                   (dynamic-link (extension-library "fibers-libevent")))))
 
-
-(when (defined? 'EVREAD)
-  (export EVREAD))
-(when (defined? 'EVWRITE)
-  (export EVWRITE))
-(when (defined? 'EVCLOSED)
-  (export EVCLOSED))
 
 (define (make-wake-pipe)
   (define (set-nonblocking! port)
