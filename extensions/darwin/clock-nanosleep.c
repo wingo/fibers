@@ -20,7 +20,7 @@
 
 #include <errno.h>
 #include <time.h>
-#include <sys/types.h>
+#include <stdint.h>
 
 /**
  * The code below has been extracted from the following notcurses files:
@@ -33,8 +33,11 @@
 
 #define NANOSECS_IN_SEC 1000000000ul
 
+#ifndef TIMER_ABSTIME
 #ifdef __APPLE__
 #define TIMER_ABSTIME 1
+#else
+#error "TIMER_ABSTIME undefined"
 #endif
 
 static inline uint64_t
