@@ -138,8 +138,10 @@ EXTRA_DIST += \
 	fibers/posix-clocks-darwin.scm \
 	examples
 
-# List all platform extension files here.
+# List all extension files here.
 EXTRA_DIST += \
+	extensions/epoll.c \
+	extensions/libevent.c \
 	extensions/darwin/affinity.c \
 	extensions/darwin/clock-nanosleep.c \
 	extensions/linux/affinity.c \
