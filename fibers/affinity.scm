@@ -33,7 +33,7 @@
     (unless (getenv "FIBERS_CROSS_COMPILING")
       (catch #t
         (lambda ()
-          (dynamic-call "init_affinity" (dynamic-link (extension-library "fibers-affinity"))))
+          (dynamic-call "init_fibers_affinity" (dynamic-link (extension-library "fibers-affinity"))))
         (lambda _ (error "Ooops, getaffinity/setaffinity are not available in this platform and we were \
 unable to load fibers-affinity extension."))))))
 

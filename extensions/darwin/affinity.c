@@ -48,7 +48,7 @@ CPU_SET (int num, cpu_set_t *cs) { cs->count |= (1 << num); }
 static inline int
 CPU_ISSET (int num, cpu_set_t *cs) { return (cs->count & (1 << num)); }
 
-int sched_getaffinity(size_t cpu_size, cpu_set_t *cpu_set)
+static int sched_getaffinity(size_t cpu_size, cpu_set_t *cpu_set)
 {
   int32_t core_count = 0;
   size_t len = sizeof (core_count);
@@ -71,7 +71,7 @@ int sched_getaffinity(size_t cpu_size, cpu_set_t *cpu_set)
   return 0;
 }
 
-int pthread_setaffinity_np (size_t cpu_size, cpu_set_t *cpu_set)
+static int pthread_setaffinity_np (size_t cpu_size, cpu_set_t *cpu_set)
 {
   thread_port_t mach_thread;
   int core = 0;
@@ -121,7 +121,7 @@ static SCM scm_primitive_getaffinity (SCM id)
 // We are currently only interested in the current thread, so we are ignoring
 // the id (since currently we are always passing 0, which means the running
 // thread).
-static SCM scm_primitive_set_affinity (SCM id, SCM mask)
+static SCM scm_primitive_setaffinity (SCM id, SCM mask)
 {
   cpu_set_t cs;
   CPU_ZERO(&cs);
@@ -144,10 +144,10 @@ static SCM scm_primitive_set_affinity (SCM id, SCM mask)
   return SCM_UNSPECIFIED;
 }
 
-void init_affinity (void)
+void init_fibers_affinity (void)
 {
   scm_c_define_gsubr ("getaffinity", 1, 0, 0, scm_primitive_getaffinity);
-  scm_c_define_gsubr ("setaffinity", 2, 0, 0, scm_primitive_set_affinity);
+  scm_c_define_gsubr ("setaffinity", 2, 0, 0, scm_primitive_setaffinity);
 }
 
 /*
