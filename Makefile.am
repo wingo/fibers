@@ -28,20 +28,22 @@ info_TEXINFOS=fibers.texi
 
 SOURCES = \
 	fibers.scm \
+	fibers/affinity.scm \
 	fibers/channels.scm \
 	fibers/conditions.scm \
 	fibers/config.scm \
 	fibers/counter.scm \
+	fibers/events-impl.scm \
 	fibers/deque.scm \
 	fibers/interrupts.scm \
 	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
-	fibers/affinity.scm \
 	fibers/psq.scm \
+	fibers/posix-clocks.scm \
+	fibers/repl.scm \
 	fibers/scheduler.scm \
 	fibers/stack.scm \
-	fibers/repl.scm \
 	fibers/timers.scm \
 	fibers/web/server.scm \
 	web/server/fibers.scm
@@ -64,7 +66,7 @@ fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFL
 $(GOBJECTS): fibers-libevent.la
 
 fibers/events-impl.scm: Makefile fibers/libevent.scm
-	ln -sf $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/fibers/events-impl.scm
+	cp -f $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/fibers/events-impl.scm
 else
 if HAVE_EPOLL_WAIT
 extlib_LTLIBRARIES += fibers-epoll.la
@@ -75,7 +77,7 @@ fibers_epoll_la_LDFLAGS = -export-dynamic -module
 $(GOBJECTS): fibers-epoll.la
 
 fibers/events-impl.scm: Makefile fibers/epoll.scm
-	ln -sf $(abs_top_srcdir)/fibers/epoll.scm $(abs_top_builddir)/fibers/events-impl.scm
+	cp -f $(abs_top_srcdir)/fibers/epoll.scm $(abs_top_builddir)/fibers/events-impl.scm
 endif
 endif
 
@@ -99,7 +101,7 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
 fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
-	ln -sf $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
+	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
 CLEANFILES += fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
 
