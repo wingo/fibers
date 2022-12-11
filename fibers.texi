@@ -83,9 +83,9 @@ One of the most dominant patterns for concurrency these days is
 Node.js run-time for JavaScript.  The basic observation in the
 callback approach to concurrency is that the efficient way to handle
 tens of thousands of connections at once is with low-level operating
-system facilities like @code{poll}, @code{epoll} or
-@code{kqueue}. Fibers will use the native events system facility
-implementation when avaliable (e.g. @code{epoll} on Linux systems) but
+system facilities like @code{poll}, @code{epoll} or @code{kqueue}.  By
+default, Fibers will try to use the native events system facility
+implementation (e.g. @code{epoll} on Linux systems) but
 @code{libevent} is also supported for portability reasons.  You add
 all of the file descriptors that you are interested in to a ``poll
 set'' and then ask the operating system which ones are readable or
