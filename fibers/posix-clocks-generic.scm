@@ -1,4 +1,4 @@
-;; POSIX clocks (Linux)
+;; POSIX clocks
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 ;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>

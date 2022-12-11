@@ -116,7 +116,7 @@ TESTS = \
 	tests/speedup.scm
 
 # The following tests require SOCK_NONBLOCK and SOCK_CLOEXEC. For now we just
-# run them on Linux.
+# run them on a platform that supports epoll (probably Linux).
 if HAVE_EPOLL_WAIT
 TESTS += \
         tests/ports.scm \
@@ -136,8 +136,8 @@ EXTRA_DIST += \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
-	fibers/posix-clocks-linux.scm \
 	fibers/posix-clocks-darwin.scm \
+	fibers/posix-clocks-generic.scm \
 	examples
 
 # List all extension files here.
@@ -146,5 +146,5 @@ EXTRA_DIST += \
 	extensions/libevent.c \
 	extensions/darwin/affinity.c \
 	extensions/darwin/clock-nanosleep.c \
-	extensions/linux/affinity.c \
-	extensions/linux/clock-nanosleep.c
+	extensions/generic/affinity.c \
+	extensions/generic/clock-nanosleep.c

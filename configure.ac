@@ -71,7 +71,7 @@ case "$host_os" in
     *linux*)
         needs_clocks_ext=no
         needs_affinity_ext=no
-        PLATFORM=linux
+        PLATFORM=generic
         ;;
 esac
 
