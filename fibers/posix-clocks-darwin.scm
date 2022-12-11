@@ -25,9 +25,7 @@
   #:use-module (fibers config)
   #:use-module (ice-9 match)
   #:use-module (system foreign)
-  #:export (init-posix-clocks
-            clock-nanosleep
-            clock-getcpuclockid
+  #:export (clock-nanosleep
             pthread-getcpuclockid
             pthread-self))
 
@@ -51,9 +49,6 @@
 (define CLOCK_MONOTONIC 6)
 (define CLOCK_PROCESS_CPUTIME_ID 12)
 (define CLOCK_THREAD_CPUTIME_ID 16)
-
-(define clock-getcpuclockid
-  (lambda* (pid) CLOCK_PROCESS_CPUTIME_ID))
 
 (define pthread-getcpuclockid
   (lambda* (pid) CLOCK_THREAD_CPUTIME_ID))
