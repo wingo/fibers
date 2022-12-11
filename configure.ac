@@ -50,6 +50,12 @@ AC_SUBST(WARN_CFLAGS)
 AC_CHECK_FUNCS(epoll_wait)
 AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test "x$ac_cv_func_epoll_wait" = "xyes"])
 
+GUILE_CHECK([GUILE_HAVE_AFFINITY], (exit (or (defined? 'setaffinity) 2)))
+AM_CONDITIONAL([GUILE_HAVE_AFFINITY], [test "x$GUILE_HAVE_AFFINITY" = "x0"])
+
+AC_CHECK_FUNCS(clock_nanosleep)
+AM_CONDITIONAL([HAVE_CLOCK_NANOSLEEP], [test "x$ac_cv_func_clock_nanosleep" = "xyes"])
+
 AC_ARG_WITH([libevent],
     [AS_HELP_STRING([--with-libevent],
         [use libevent for events backend  @<:@default=no@:>@])],
@@ -64,19 +70,12 @@ AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = "xyes"])
 # Detect the target system
 case "$host_os" in
     *darwin*)
-        needs_clocks_ext=yes
-        needs_affinity_ext=yes
         PLATFORM=darwin
         ;;
     *linux*)
-        needs_clocks_ext=no
-        needs_affinity_ext=no
         PLATFORM=generic
         ;;
 esac
-
-AM_CONDITIONAL([NEEDS_CLOCKS_EXT], [test "x$needs_clocks_ext" = "xyes"])
-AM_CONDITIONAL([NEEDS_AFFINITY_EXT], [test "x$needs_affinity_ext" = "xyes"])
 AC_SUBST(PLATFORM)
 
 # Check if we have what we need for the detected platform.

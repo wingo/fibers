@@ -81,14 +81,14 @@ fibers/events-impl.scm: Makefile fibers/epoll.scm
 endif
 endif
 
-if NEEDS_AFFINITY_EXT
+if ! GUILE_HAVE_AFFINITY
 extlib_LTLIBRARIES += fibers-affinity.la
 fibers_affinity_la_SOURCES = extensions/$(PLATFORM)/affinity.c
 fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
 fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
 
-if NEEDS_CLOCKS_EXT
+if ! HAVE_CLOCK_NANOSLEEP
 extlib_LTLIBRARIES += fibers-clocks.la
 fibers_clocks_la_SOURCES = extensions/$(PLATFORM)/clock-nanosleep.c
 fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
