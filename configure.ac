@@ -76,7 +76,7 @@ case "$host_os" in
     *darwin*)
         PLATFORM=darwin
         ;;
-    *linux*)
+    *)
         PLATFORM=generic
         ;;
 esac
