@@ -39,6 +39,7 @@
 #else
 #error "TIMER_ABSTIME undefined"
 #endif
+#endif
 
 static inline uint64_t
 timespec_to_ns (const struct timespec *ts)

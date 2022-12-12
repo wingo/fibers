@@ -94,6 +94,7 @@ static int pthread_setaffinity_np (size_t cpu_size, cpu_set_t *cpu_set)
 // the id (since currently we are always passing 0, which means the running
 // thread).
 static SCM scm_primitive_getaffinity (SCM id)
+#define FUNC_NAME "getaffinity"
 {
   cpu_set_t cs;
   CPU_ZERO(&cs);
@@ -116,11 +117,13 @@ static SCM scm_primitive_getaffinity (SCM id)
 
   return bv;
 }
+#undef FUNC_NAME
 
 // We are currently only interested in the current thread, so we are ignoring
 // the id (since currently we are always passing 0, which means the running
 // thread).
 static SCM scm_primitive_setaffinity (SCM id, SCM mask)
+#define FUNC_NAME "getaffinity"
 {
   cpu_set_t cs;
   CPU_ZERO(&cs);
@@ -139,6 +142,7 @@ static SCM scm_primitive_setaffinity (SCM id, SCM mask)
 
   return SCM_UNSPECIFIED;
 }
+#undef FUNC_NAME
 
 void init_fibers_affinity (void)
 {

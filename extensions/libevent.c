@@ -69,6 +69,7 @@ free_wait_data (void *ptr)
 
 static void
 cb_func (evutil_socket_t fd, short what, void *arg)
+#define FUNC_NAME "primitive-event-loop"
 {
   struct wait_data* data = arg;
   int rv = data->rv;
@@ -79,19 +80,14 @@ cb_func (evutil_socket_t fd, short what, void *arg)
   // is because those assumptions are wrong and we might be doing something
   // funky.
   if (rv >= data->maxevents)
-    {
-      scm_puts ("fibers-libevent[ERROR]: ", scm_current_error_port ());
-      scm_puts ("max events fired on [", scm_current_error_port ());
-      scm_display (scm_from_int(fd), scm_current_error_port ());
-      scm_puts ("], ignoring.\n", scm_current_error_port ());
-      return;
-    }
+    SCM_MISC_ERROR ("max events fired on fd(~A)", scm_from_int(fd));
 
   struct event_data ev_data = { fd, what };
   memcpy (data->events + rv, &ev_data, sizeof (struct event_data));
 
   data->rv += 1;
 }
+#undef FUNC_NAME
 
 static SCM
 scm_primitive_event_wake (SCM wakefd)
@@ -118,7 +114,7 @@ scm_primitive_create_event_base (SCM eventsv)
   struct event_base *base;
 
   if ((base = event_base_new ()) == NULL)
-    scm_syserror ("couldn't instantiate event_base");
+    SCM_MISC_ERROR ("couldn't allocate event_base", SCM_EOL);
 
   libevt = (struct libevt_data *) scm_gc_malloc (sizeof (struct libevt_data),
                                                  "libevt_data");
@@ -154,8 +150,16 @@ scm_primitive_add_event (SCM lst, SCM fd, SCM ev)
     (struct wait_data *) scm_to_pointer (scm_list_ref (lst, scm_from_int (1)));
 
   event = event_new (libevt->base, c_fd, c_ev, cb_func, data);
-  event_add (event, NULL);
+  if (event == NULL)
+    SCM_MISC_ERROR ("couldn't allocate event", SCM_EOL);
 
+  // We are adding a persistent event.
+  int ret = event_add (event, NULL);
+  if (ret == -1)
+    SCM_MISC_ERROR ("failed to add event", SCM_EOL);
+
+  // We don't need a finalizer since we want to control when event_del() is
+  // called in (primitive-remove-event).
   return scm_from_pointer (event, NULL);
 }
 #undef FUNC_NAME
@@ -166,7 +170,9 @@ scm_primitive_remove_event (SCM lst, SCM scm_event)
 {
   struct event *event = scm_to_pointer(scm_event);
 
-  event_del (event);
+  int ret = event_del (event);
+  if (ret == -1)
+    SCM_MISC_ERROR ("failed to delete event", SCM_EOL);
 
   return SCM_UNSPECIFIED;
 }
@@ -192,7 +198,9 @@ static uint64_t time_units_per_microsec;
 
 static void*
 run_event_loop (void *p)
+#define FUNC_NAME "primitive-event-loop"
 {
+  int ret = 0;
   int microsec = 0;
   struct timeval tv;
 
@@ -208,12 +216,19 @@ run_event_loop (void *p)
     }
 
   if (microsec >= 0)
-    event_base_loopexit (data->base, &tv);
+    {
+      ret = event_base_loopexit (data->base, &tv);
+      if (ret == -1)
+        SCM_MISC_ERROR ("event loop exit failed", SCM_EOL);
+    }
 
-  event_base_loop (data->base, EVLOOP_ONCE);
+  ret = event_base_loop (data->base, EVLOOP_ONCE);
+  if (ret == -1)
+    SCM_MISC_ERROR ("event loop failed", SCM_EOL);
 
   return NULL;
 }
+#undef FUNC_NAME
 
 static SCM
 scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
@@ -265,7 +280,7 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
               /* Drain fd and ignore errors. */
               while (read (c_wokefd, zeroes, sizeof zeroes) == sizeof zeroes)
                 {
-                  // empty
+                  // intentionally empty
                 }
               break;
             }
