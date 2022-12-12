@@ -72,14 +72,14 @@
   (lambda (x)
     (syntax-case x ()
       ((_ n)
-       #`(* n #,%sizeof-struct-event)))))
+       #`(* n %sizeof-struct-event)))))
 
 (define-syntax event-offset
   (lambda (x)
     (syntax-case x ()
       ((_ n)
-       #`(+ (* n #,%sizeof-struct-event)
-            #,%offsetof-struct-event-ev)))))
+       #`(+ (* n %sizeof-struct-event)
+            %offsetof-struct-event-ev)))))
 
 (define libevt-guardian (make-guardian))
 (define (pump-libevt-guardian)
