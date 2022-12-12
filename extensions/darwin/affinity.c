@@ -52,15 +52,11 @@ static int sched_getaffinity(size_t cpu_size, cpu_set_t *cpu_set)
 {
   int32_t core_count = 0;
   size_t len = sizeof (core_count);
+  // sysctlbyname() sets global errno if an error is returned.
   int ret = sysctlbyname (SYSCTL_CORE_COUNT, &core_count, &len, 0, 0);
 
   if (ret)
-    {
-      scm_puts ("fibers-affinity[ERROR]: error getting core count: ", scm_current_error_port ());
-      scm_display (scm_from_int(ret), scm_current_error_port ());
-      scm_puts ("\n", scm_current_error_port ());
-      return -1;
-    }
+    return -1;
 
   cpu_set->count = 0;
   for (int i = 0; i < core_count; i++)
@@ -103,7 +99,10 @@ static SCM scm_primitive_getaffinity (SCM id)
   CPU_ZERO(&cs);
   size_t cpu_size = sizeof(cs);
 
-  sched_getaffinity (cpu_size, &cs);
+  int ret = sched_getaffinity (cpu_size, &cs);
+
+  if (ret)
+    SCM_SYSERROR;
 
   SCM bv = scm_c_make_bitvector (cpu_size, scm_from_int (0));
 
@@ -134,12 +133,9 @@ static SCM scm_primitive_setaffinity (SCM id, SCM mask)
     }
 
   int ret = pthread_setaffinity_np (sizeof (cpu_set_t), &cs);
+
   if (ret)
-    {
-      scm_puts ("fibers-affinity[ERROR]: error setting affinity: ", scm_current_error_port ());
-      scm_display (scm_from_int(ret), scm_current_error_port ());
-      scm_puts ("\n", scm_current_error_port ());
-    }
+    SCM_SYSERROR;
 
   return SCM_UNSPECIFIED;
 }
