@@ -267,8 +267,14 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
 
       for (int i = 0; i < data->rv; i++)
         {
+          /* Sometimes we want to wake up the loop event and we do so by writing
+           * into a write pipe (see scm_primitive_event_wake). Those writes end
+           * up in the read pipe and since those are not real events we just
+           * want to ignore them and drain them as we do below.
+           */
           if (data->events[i].fd == c_wokefd)
             {
+              /* This is just a random size to read from the read pipe. */
               char zeroes[32];
               /* Remove wake fd from result set.  */
               data->rv--;
@@ -278,7 +284,7 @@ scm_primitive_event_loop (SCM lst, SCM wakefd, SCM wokefd, SCM timeout)
               /* Drain fd and ignore errors. */
               while (read (c_wokefd, zeroes, sizeof zeroes) == sizeof zeroes)
                 {
-                  // intentionally empty
+                  /* intentionally empty */
                 }
               break;
             }
