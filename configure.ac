@@ -47,6 +47,9 @@ AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build 
     [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
 
+AC_ARG_ENABLE([epoll], AS_HELP_STRING([--disable-epoll],[Disable epoll support]),
+    [disable_epoll=yes], [disable_epoll=no])
+
 AC_CHECK_FUNCS(epoll_wait)
 AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test "x$ac_cv_func_epoll_wait" = "xyes"])
 
@@ -56,16 +59,17 @@ AM_CONDITIONAL([GUILE_HAVE_AFFINITY], [test "x$GUILE_HAVE_AFFINITY" = "x0"])
 AC_CHECK_FUNCS(clock_nanosleep)
 AM_CONDITIONAL([HAVE_CLOCK_NANOSLEEP], [test "x$ac_cv_func_clock_nanosleep" = "xyes"])
 
-AC_ARG_WITH([libevent],
-    [AS_HELP_STRING([--with-libevent],
-        [use libevent for events backend  @<:@default=no@:>@])],
-        [],
-        [with_libevent=no])
+# We should update `native_support` variable to yes if any native system
+# (e.g. epoll, kqueue) was found and not disabled.
+AS_IF([test "x$ac_cv_func_epoll_wait" = "xyes"],
+    [AS_IF([test "x$disable_epoll" = "xyes"], [native_support=no],[native_support=yes])],[native_support=no])
 
-AS_IF([test "x$with_libevent" != "xno"],
-    [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],,
-        [AC_MSG_ERROR([unable to find libevent])])])
-AM_CONDITIONAL([WITH_LIBEVENT], [test "x$with_libevent" = "xyes"])
+# If there's no native support or it was disabled, try libevent.
+AS_IF([test "x$native_support" = "xno"],
+    [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],[have_libevent=yes],
+        [AC_MSG_ERROR([Not found or disabled native support, and libevent was not found either])])])
+
+AM_CONDITIONAL([HAVE_LIBEVENT], [test "x$have_libevent" = "xyes"])
 
 # Detect the target system
 case "$host_os" in
@@ -77,11 +81,6 @@ case "$host_os" in
         ;;
 esac
 AC_SUBST(PLATFORM)
-
-# Check if we have what we need for the detected platform.
-AS_IF([test "x$with_libevent" = "xno"],
-    [AS_IF([test x"$ac_cv_func_epoll_wait" = "xno"],
-        [AC_MSG_ERROR([Native support not available, try --with-libevent=yes instead])])])
 
 #
 # Check for Guile

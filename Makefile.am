@@ -58,7 +58,7 @@ AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
 
 extlib_LTLIBRARIES =
 
-if WITH_LIBEVENT
+if HAVE_LIBEVENT
 extlib_LTLIBRARIES += fibers-libevent.la
 fibers_libevent_la_SOURCES = extensions/libevent.c
 fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS) -Iextensions
