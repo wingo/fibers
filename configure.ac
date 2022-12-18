@@ -53,9 +53,6 @@ AC_ARG_ENABLE([epoll], AS_HELP_STRING([--disable-epoll],[Disable epoll support])
 AC_CHECK_FUNCS(epoll_wait)
 AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test "x$ac_cv_func_epoll_wait" = "xyes"])
 
-GUILE_CHECK([GUILE_HAVE_AFFINITY], (exit (or (defined? 'setaffinity) 2)))
-AM_CONDITIONAL([GUILE_HAVE_AFFINITY], [test "x$GUILE_HAVE_AFFINITY" = "x0"])
-
 AC_CHECK_FUNCS(clock_nanosleep)
 AM_CONDITIONAL([HAVE_CLOCK_NANOSLEEP], [test "x$ac_cv_func_clock_nanosleep" = "xyes"])
 

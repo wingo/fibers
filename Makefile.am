@@ -28,7 +28,6 @@ info_TEXINFOS=fibers.texi
 
 SOURCES = \
 	fibers.scm \
-	fibers/affinity.scm \
 	fibers/channels.scm \
 	fibers/conditions.scm \
 	fibers/config.scm \
@@ -40,7 +39,6 @@ SOURCES = \
 	fibers/nameset.scm \
 	fibers/operations.scm \
 	fibers/psq.scm \
-	fibers/posix-clocks.scm \
 	fibers/repl.scm \
 	fibers/scheduler.scm \
 	fibers/stack.scm \
@@ -49,9 +47,10 @@ SOURCES = \
 	web/server/fibers.scm
 
 BUILT_SOURCES = \
+	fibers/affinity.scm \
 	fibers/config.scm \
-	fibers/posix-clocks.scm \
-	fibers/events-impl.scm
+	fibers/events-impl.scm \
+	fibers/posix-clocks.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
@@ -81,13 +80,6 @@ fibers/events-impl.scm: Makefile fibers/epoll.scm
 endif
 endif
 
-if ! GUILE_HAVE_AFFINITY
-extlib_LTLIBRARIES += fibers-affinity.la
-fibers_affinity_la_SOURCES = extensions/$(PLATFORM)/affinity.c
-fibers_affinity_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
-fibers_affinity_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
-endif
-
 if ! HAVE_CLOCK_NANOSLEEP
 extlib_LTLIBRARIES += fibers-clocks.la
 fibers_clocks_la_SOURCES = extensions/$(PLATFORM)/clock-nanosleep.c
@@ -100,10 +92,17 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
+fibers/affinity.scm: Makefile fibers/affinity-$(PLATFORM).scm
+	cp -f $(abs_top_srcdir)/fibers/affinity-$(PLATFORM).scm $(abs_top_builddir)/fibers/affinity.scm
+
 fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
 	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
-CLEANFILES += fibers/config.scm fibers/posix-clocks.scm fibers/events-impl.scm
+CLEANFILES += \
+	fibers/affinity.scm \
+	fibers/config.scm \
+	fibers/events-impl.scm \
+	fibers/posix-clocks.scm
 
 TESTS = \
 	tests/basic.scm \
@@ -136,6 +135,8 @@ EXTRA_DIST += \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
+	fibers/affinity-darwin.scm \
+	fibers/affinity-generic.scm \
 	fibers/posix-clocks-darwin.scm \
 	fibers/posix-clocks-generic.scm \
 	examples
@@ -144,7 +145,6 @@ EXTRA_DIST += \
 EXTRA_DIST += \
 	extensions/epoll.c \
 	extensions/libevent.c \
-	extensions/darwin/affinity.c \
+	extensions/clock-nanosleep.h \
 	extensions/darwin/clock-nanosleep.c \
-	extensions/generic/affinity.c \
 	extensions/generic/clock-nanosleep.c

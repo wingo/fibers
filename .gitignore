@@ -33,6 +33,7 @@ build/
 /build-aux/depcomp
 /build-aux/texinfo.tex
 /fibers.info
+/fibers/affinity.scm
 /fibers/config.scm
 /fibers/posix-clocks.scm
 /fibers/events-impl.scm

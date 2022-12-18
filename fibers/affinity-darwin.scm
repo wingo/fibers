@@ -1,4 +1,4 @@
-;; CPU affinity
+;; CPU affinity (Darwin)
 
 ;;;; Copyright (C) 2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;;
@@ -21,21 +21,17 @@
 ;;; library.
 
 (define-module (fibers affinity)
-  #:use-module (system foreign)
-  #:use-module (fibers config)
+  #:use-module (ice-9 threads)
   #:export (getaffinity* setaffinity*))
 
-(eval-when (eval load compile)
-  (unless (defined? 'getaffinity)
-    ;; When cross-compiling, the cross-compiled 'fibers-affinity.so' cannot be
-    ;; loaded by the 'guild compile' process; skip it.
-    (unless (getenv "FIBERS_CROSS_COMPILING")
-      (catch #t
-        (lambda ()
-          (dynamic-call "init_fibers_affinity" (dynamic-link (extension-library "fibers-affinity"))))
-        (lambda _ (error "Ooops, getaffinity/setaffinity are not available in this platform and we were \
-unable to load fibers-affinity extension."))))))
+;;
+;; It seems it is not possible to link a thread to a specific core on
+;; macOS. See, for example: https://developer.apple.com/forums/thread/44002.
+;;
+;; So for now getaffinity/setaffinity are no-ops.
+;;
 
-;; getaffinity/setaffinity should be loaded at this point.
-(define getaffinity* (if (defined? 'getaffinity) getaffinity))
-(define setaffinity* (if (defined? 'setaffinity) setaffinity))
+(define (getaffinity* pid)
+  (make-bitvector (current-processor-count) 1))
+
+(define (setaffinity* pid affinity) *unspecified*)
