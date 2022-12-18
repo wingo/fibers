@@ -18,12 +18,19 @@
 
 
 
-#include <stdio.h>
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
 #include <event2/event.h>
 #include <libguile.h>
+
+#if SCM_MAJOR_VERSION == 2
+# include <fcntl.h>				  /* O_CLOEXEC */
+#endif
 
 struct event_data
 {
@@ -328,6 +335,11 @@ init_fibers_libevt (void)
   scm_c_define ("EVWRITE", scm_from_int (EV_WRITE));
   scm_c_define ("EVPERSIST", scm_from_int (EV_PERSIST));
   scm_c_define ("EVCLOSED", scm_from_int (EV_CLOSED));
+
+#if SCM_MAJOR_VERSION == 2
+  /* Guile 2.2.7 lacks a definition for O_CLOEXEC.  */
+  scm_c_define ("O_CLOEXEC", scm_from_int (O_CLOEXEC));
+#endif
 }
 
 /*
