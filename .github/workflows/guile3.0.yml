@@ -22,10 +22,6 @@ jobs:
         run: ./autogen.sh
       - name: Configure
         run: ./configure
-      - name: Make
-        run: make
-      - name: Run tests
-        run: make check
       - name: Make distribution
         run: make distcheck
 
@@ -45,9 +41,5 @@ jobs:
         run: ./autogen.sh
       - name: Configure
         run: ./configure --disable-epoll
-      - name: Make
-        run: make
-      - name: Run tests
-        run: make check
       - name: Make distribution
         run: make distcheck DISTCHECK_CONFIGURE_FLAGS=--disable-epoll
