@@ -60,7 +60,7 @@ extlib_LTLIBRARIES =
 if HAVE_LIBEVENT
 extlib_LTLIBRARIES += fibers-libevent.la
 fibers_libevent_la_SOURCES = extensions/libevent.c
-fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS) -Iextensions
+fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS) -I$(top_srcdir)/extensions
 fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
 $(GOBJECTS): fibers-libevent.la
 
@@ -70,7 +70,7 @@ else
 if HAVE_EPOLL_WAIT
 extlib_LTLIBRARIES += fibers-epoll.la
 fibers_epoll_la_SOURCES = extensions/epoll.c
-fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
+fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -I$(top_srcdir)/extensions
 fibers_epoll_la_LIBADD = $(GUILE_LIBS)
 fibers_epoll_la_LDFLAGS = -export-dynamic -module
 $(GOBJECTS): fibers-epoll.la
@@ -83,7 +83,7 @@ endif
 if ! HAVE_CLOCK_NANOSLEEP
 extlib_LTLIBRARIES += fibers-clocks.la
 fibers_clocks_la_SOURCES = extensions/$(PLATFORM)/clock-nanosleep.c
-fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -Iextensions
+fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -I$(top_srcdir)/extensions
 fibers_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
 endif
 
@@ -93,9 +93,11 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
 fibers/affinity.scm: Makefile fibers/affinity-$(PLATFORM).scm
+	mkdir -p $(abs_top_builddir)/fibers
 	cp -f $(abs_top_srcdir)/fibers/affinity-$(PLATFORM).scm $(abs_top_builddir)/fibers/affinity.scm
 
 fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
+	mkdir -p $(abs_top_builddir)/fibers
 	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
 CLEANFILES += \
