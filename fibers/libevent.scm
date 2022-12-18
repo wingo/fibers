@@ -47,7 +47,7 @@
 
 (define (make-wake-pipe)
   (define (set-nonblocking! port)
-    (fcntl port F_SETFL (logior O_NONBLOCK (fcntl port F_GETFL))))
+    (fcntl port F_SETFL (logior O_NONBLOCK O_CLOEXEC (fcntl port F_GETFL))))
   (let ((pair (pipe)))
     (match pair
       ((read-pipe . write-pipe)
