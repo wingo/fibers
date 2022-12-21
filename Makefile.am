@@ -28,6 +28,7 @@ info_TEXINFOS=fibers.texi
 
 SOURCES = \
 	fibers.scm \
+	fibers/affinity.scm \
 	fibers/channels.scm \
 	fibers/conditions.scm \
 	fibers/config.scm \
@@ -38,6 +39,7 @@ SOURCES = \
 	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
+	fibers/posix-clocks.scm \
 	fibers/psq.scm \
 	fibers/repl.scm \
 	fibers/scheduler.scm \
