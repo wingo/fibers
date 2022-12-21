@@ -67,6 +67,7 @@
         (lambda (ret errno)
           (unless (zero? ret) (error (strerror errno)))
           (timespec->nsec buf))))))
+
 (define (nsec->timespec nsec)
   (make-c-struct struct-timespec
                  (list (quotient nsec #e1e9) (modulo nsec #e1e9))))

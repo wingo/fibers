@@ -46,6 +46,16 @@
 (define CLOCK_REALTIME_COARSE 5)
 (define CLOCK_MONOTONIC_COARSE 6)
 
+(define clock-getcpuclockid
+  (let* ((ptr (dynamic-pointer "clock_getcpuclockid" exe))
+         (proc (pointer->procedure int ptr (list pid-t '*)
+                                   #:return-errno? #t)))
+    (lambda* (pid #:optional (buf (make-bytevector (sizeof clockid-t))))
+      (call-with-values (lambda () (proc pid (bytevector->pointer buf)))
+        (lambda (ret errno)
+          (unless (zero? ret) (error (strerror errno)))
+          (bytevector-s32-native-ref buf 0))))))
+
 (define pthread-self
   (let* ((ptr (dynamic-pointer "pthread_self" exe))
          (proc (pointer->procedure pthread-t ptr '())))
@@ -62,14 +72,15 @@
           (unless (zero? ret) (error (strerror errno)))
           (bytevector-s32-native-ref buf 0))))))
 
-(define (nsec->timespec nsec)
-  (make-c-struct struct-timespec
-                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
-
-(define (timespec->nsec ts)
-  (match (parse-c-struct ts struct-timespec)
-    ((sec nsec)
-     (+ (* sec #e1e9) nsec))))
+(define clock-getres
+  (let* ((ptr (dynamic-pointer "clock_getres" exe))
+         (proc (pointer->procedure int ptr (list clockid-t '*)
+                                   #:return-errno? #t)))
+    (lambda* (clockid #:optional (buf (nsec->timespec 0)))
+      (call-with-values (lambda () (proc clockid buf))
+        (lambda (ret errno)
+          (unless (zero? ret) (error (strerror errno)))
+          (timespec->nsec buf))))))
 
 (define clock-gettime
   (let* ((ptr (dynamic-pointer "clock_gettime" exe))
@@ -80,6 +91,15 @@
         (lambda (ret errno)
           (unless (zero? ret) (error (strerror errno)))
           (timespec->nsec buf))))))
+
+(define (nsec->timespec nsec)
+  (make-c-struct struct-timespec
+                 (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
+
+(define (timespec->nsec ts)
+  (match (parse-c-struct ts struct-timespec)
+    ((sec nsec)
+     (+ (* sec #e1e9) nsec))))
 
 (define clock-nanosleep
   (let* ((ptr (dynamic-pointer "clock_nanosleep" exe))
