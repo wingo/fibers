@@ -2,6 +2,25 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
+fibers 1.2.0 -- 2022-12-22
+==========================
+
+* Add support for 'libevent' backend. Currently only native 'epoll' is
+  supported. If 'epoll' is not detected we would default to 'libevent'. If you
+  have 'epoll' but want to try 'libevent' you can always do './configure
+  --disable-epoll'.
+
+* Do not re-add FD finalisers on FDs that already have one.
+
+* Introduce 'pipe2' (for 'epoll') and mark wake pipe as O_CLOEXEC.
+
+* Implement operations for waiting for readability / writability.
+
+* Support streaming responses in Fibers' web server to allow for bigger
+  responses.
+
+* Fix behaviour of 'epoll-wake!' after 'run-fibers'.
+
 fibers 1.1.1 -- 2022-06-03
 ==========================
 

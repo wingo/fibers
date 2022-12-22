@@ -4,15 +4,16 @@
 @settitle Fibers
 @c %**end of header
 
-@set VERSION 1.1.1
-@set UPDATED 3 June 2022
+@set VERSION 1.2.0
+@set UPDATED 22 December 2022
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated
 @value{UPDATED})
 
-Copyright 2016-2022 Andy Wingo
+Copyright 2016 Andy Wingo
 Copyright 2021 Maxime Devos
+Copyright 2022 Aleix Conchillo Flaqué
 
 @quotation
 @c For more information, see COPYING.docs in the fibers
