@@ -83,14 +83,17 @@ One of the most dominant patterns for concurrency these days is
 Node.js run-time for JavaScript.  The basic observation in the
 callback approach to concurrency is that the efficient way to handle
 tens of thousands of connections at once is with low-level operating
-system facilities like @code{poll} or @code{epoll}.  You add all of
-the file descriptors that you are interested in to a ``poll set'' and
-then ask the operating system which ones are readable or writable, as
-appropriate.  Once the operating system says ``yes, file descriptor
-7145 is readable'', you can do something with that socket; but what?
-With callbacks, the answer is ``call a user-supplied closure'': a
-callback, representing the continuation of the computation on that
-socket.
+system facilities like @code{poll}, @code{epoll} or @code{kqueue}.  By
+default, Fibers will try to use the native events system facility
+implementation (e.g. @code{epoll} on Linux systems) but
+@code{libevent} is also supported for portability reasons.  You add
+all of the file descriptors that you are interested in to a ``poll
+set'' and then ask the operating system which ones are readable or
+writable, as appropriate.  Once the operating system says ``yes, file
+descriptor 7145 is readable'', you can do something with that socket;
+but what?  With callbacks, the answer is ``call a user-supplied
+closure'': a callback, representing the continuation of the
+computation on that socket.
 
 Building a network service with a callback-oriented concurrency system
 means breaking the program into little chunks that can run without
@@ -315,7 +318,7 @@ When a fiber would block, it suspends to the scheduler from the
 current thread.  The scheduler will arrange to re-start the fiber when
 the port or channel becomes readable or writable, as appropriate.  For
 ports, the scheduler adds the file descriptor associated with the port
-to an @code{epoll} set.  In either case, the scheduler remembers which
+as a pending event.  In either case, the scheduler remembers which
 fibers are waiting and for what, so that the user can inspect the
 state of their system.
 
@@ -802,10 +805,11 @@ popping off an item from the remote scheduler's ``current'' run-queue.
 
 There are two additional sources of tasks for a scheduler: file
 descriptor events and timers.  When gathering tasks to schedule for
-the next turn, a scheduler will call @code{epoll} to be notified of
-activity on file descriptors of interest.  If there are no pending
-tasks on the next run-queue, the call to @code{epoll} will sleep until
-the scheduler is woken up, or until a timer expires.
+the next turn, a scheduler will call the native events system faciliy
+implementation to be notified of activity on file descriptors of
+interest.  If there are no pending tasks on the next run-queue, the
+call to the events system facility will sleep until the scheduler is
+woken up, or until a timer expires.
 
 The capability that allows fibers to be built on schedulers is that
 tasks can suspend.  Suspending a task calls a user-supplied

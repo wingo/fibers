@@ -1,6 +1,6 @@
-;; fibers
+;; CPU affinity
 
-;;;; Copyright (C) 2017 Andy Wingo <wingo@pobox.com>
+;;;; Copyright (C) 2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -14,16 +14,17 @@
 ;;;;
 ;;;; You should have received a copy of the GNU Lesser General Public License
 ;;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
-;;;;
 
-(define-module (fibers config)
-  #:export (extension-library))
+;;; Guile defines setaffinity and getaffinity in some systems (e.g. Linux). For
+;;; those systems where those procedures are not available there should be a
+;;; Fibers' specific implementation available through the fibers-affinity
+;;; library.
 
-(define *extlibdir*
-  (cond
-   ((getenv "FIBERS_BUILD_DIR")
-    => (lambda (builddir) (in-vicinity builddir ".libs")))
-   (else "@extlibdir@")))
+(define-module (fibers affinity)
+  #:use-module (system foreign)
+  #:use-module (fibers config)
+  #:export (getaffinity* setaffinity*))
 
-(define (extension-library lib)
-  (in-vicinity *extlibdir* lib))
+;; getaffinity/setaffinity should be defined in Guile
+(define getaffinity* (if (defined? 'getaffinity) getaffinity))
+(define setaffinity* (if (defined? 'setaffinity) setaffinity))

@@ -8,9 +8,7 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-22.04
-
     steps:
       - name: Install dependencies
         run: |
@@ -24,9 +22,24 @@ jobs:
         run: ./autogen.sh
       - name: Configure
         run: ./configure
-      - name: Make
-        run: make
-      - name: Run tests
-        run: make check
       - name: Make distribution
         run: make distcheck
+
+  build-libevent:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install automake autoconf libtool pkg-config make gcc
+          sudo apt install guile-3.0 guile-3.0-libs guile-3.0-dev
+          sudo apt install gettext texinfo texlive
+          sudo apt install libevent-dev
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Autogen
+        run: ./autogen.sh
+      - name: Configure
+        run: ./configure --disable-epoll
+      - name: Make distribution
+        run: make distcheck DISTCHECK_CONFIGURE_FLAGS=--disable-epoll

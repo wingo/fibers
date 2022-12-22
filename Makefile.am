@@ -1,5 +1,7 @@
 # fibers
-# Copyright (C) 2016  Andy Wingo <wingo@pobox.com>
+# Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+# Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+# Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
@@ -26,42 +28,85 @@ info_TEXINFOS=fibers.texi
 
 SOURCES = \
 	fibers.scm \
+	fibers/affinity.scm \
 	fibers/channels.scm \
 	fibers/conditions.scm \
 	fibers/config.scm \
 	fibers/counter.scm \
+	fibers/events-impl.scm \
 	fibers/deque.scm \
-	fibers/epoll.scm \
 	fibers/interrupts.scm \
 	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
 	fibers/posix-clocks.scm \
 	fibers/psq.scm \
+	fibers/repl.scm \
 	fibers/scheduler.scm \
 	fibers/stack.scm \
-	fibers/repl.scm \
 	fibers/timers.scm \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
-BUILT_SOURCES = fibers/config.scm
+BUILT_SOURCES = \
+	fibers/affinity.scm \
+	fibers/config.scm \
+	fibers/events-impl.scm \
+	fibers/posix-clocks.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
-extlib_LTLIBRARIES = epoll.la
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
-epoll_la_SOURCES = epoll.c
-epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS)
-epoll_la_LIBADD = $(GUILE_LIBS)
-epoll_la_LDFLAGS = -export-dynamic -module
-$(GOBJECTS): epoll.la
+
+extlib_LTLIBRARIES =
+
+if HAVE_LIBEVENT
+extlib_LTLIBRARIES += fibers-libevent.la
+fibers_libevent_la_SOURCES = extensions/libevent.c
+fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS) -I$(top_srcdir)/extensions
+fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
+$(GOBJECTS): fibers-libevent.la
+
+fibers/events-impl.scm: Makefile fibers/libevent.scm
+	cp -f $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/fibers/events-impl.scm
+else
+if HAVE_EPOLL_WAIT
+extlib_LTLIBRARIES += fibers-epoll.la
+fibers_epoll_la_SOURCES = extensions/epoll.c
+fibers_epoll_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -I$(top_srcdir)/extensions
+fibers_epoll_la_LIBADD = $(GUILE_LIBS)
+fibers_epoll_la_LDFLAGS = -export-dynamic -module
+$(GOBJECTS): fibers-epoll.la
+
+fibers/events-impl.scm: Makefile fibers/epoll.scm
+	cp -f $(abs_top_srcdir)/fibers/epoll.scm $(abs_top_builddir)/fibers/events-impl.scm
+endif
+endif
+
+if ! HAVE_CLOCK_NANOSLEEP
+extlib_LTLIBRARIES += fibers-clocks.la
+fibers_clocks_la_SOURCES = extensions/$(PLATFORM)/clock-nanosleep.c
+fibers_clocks_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) -I$(top_srcdir)/extensions
+fibers_clocks_la_LDFLAGS = -module -no-undefined $(GUILE_LDFLAGS)
+endif
 
 fibers/config.scm: Makefile fibers/config.scm.in
 	mkdir -p fibers
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-CLEANFILES += fibers/config.scm
+fibers/affinity.scm: Makefile fibers/affinity-$(PLATFORM).scm
+	mkdir -p $(abs_top_builddir)/fibers
+	cp -f $(abs_top_srcdir)/fibers/affinity-$(PLATFORM).scm $(abs_top_builddir)/fibers/affinity.scm
+
+fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
+	mkdir -p $(abs_top_builddir)/fibers
+	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
+
+CLEANFILES += \
+	fibers/affinity.scm \
+	fibers/config.scm \
+	fibers/events-impl.scm \
+	fibers/posix-clocks.scm
 
 TESTS = \
 	tests/basic.scm \
@@ -70,19 +115,40 @@ TESTS = \
 	tests/foreign.scm \
 	tests/io-wakeup.scm \
 	tests/parameters.scm \
-        tests/ports.scm \
 	tests/preemption.scm \
-	tests/speedup.scm \
+	tests/speedup.scm
+
+# The following tests require SOCK_NONBLOCK and SOCK_CLOEXEC. For now we just
+# run them on a platform that supports epoll (probably Linux).
+if HAVE_EPOLL_WAIT
+TESTS += \
+        tests/ports.scm \
 	tests/concurrent-web-server.scm
+endif
+
 TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
 
 EXTRA_DIST += \
+	$(bin_SCRIPTS) \
+	$(TESTS) \
 	env.in \
-	fibers/config.scm.in \
 	HACKING \
         COPYING.LESSER \
 	README.md \
 	TODO.md \
-	$(bin_SCRIPTS) \
-	$(TESTS) \
+	fibers/config.scm.in \
+	fibers/epoll.scm \
+	fibers/libevent.scm \
+	fibers/affinity-darwin.scm \
+	fibers/affinity-generic.scm \
+	fibers/posix-clocks-darwin.scm \
+	fibers/posix-clocks-generic.scm \
 	examples
+
+# List all extension files here.
+EXTRA_DIST += \
+	extensions/epoll.c \
+	extensions/libevent.c \
+	extensions/clock-nanosleep.h \
+	extensions/darwin/clock-nanosleep.c \
+	extensions/generic/clock-nanosleep.c

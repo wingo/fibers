@@ -1,20 +1,21 @@
 ;; POSIX clocks
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
-;;;; 
+;;;; Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+;;;; Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
 ;;;; License as published by the Free Software Foundation; either
 ;;;; version 3 of the License, or (at your option) any later version.
-;;;; 
+;;;;
 ;;;; This library is distributed in the hope that it will be useful,
 ;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
-;;;; 
-;;;; You should have received a copy of the GNU Lesser General Public
-;;;; License along with this library; if not, write to the Free Software
-;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+;;;;
+;;;; You should have received a copy of the GNU Lesser General Public License
+;;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ;;; Fibers uses POSIX clocks to be able to preempt schedulers running
 ;;; in other threads after regular timeouts in terms of thread CPU time.
@@ -23,22 +24,9 @@
   #:use-module (system foreign)
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
-  #:export (CLOCK_REALTIME
-            CLOCK_MONOTONIC
-            CLOCK_PROCESS_CPUTIME_ID
-            CLOCK_THREAD_CPUTIME_ID
-            CLOCK_MONOTONIC_RAW
-            CLOCK_REALTIME_COARSE
-            CLOCK_MONOTONIC_COARSE
-
-            clock-getcpuclockid
+  #:export (clock-nanosleep
             pthread-getcpuclockid
-            pthread-self
-
-            clock-getres
-            clock-gettime
-
-            clock-nanosleep))
+            pthread-self))
 
 (define exe (dynamic-link))
 
@@ -107,6 +95,7 @@
 (define (nsec->timespec nsec)
   (make-c-struct struct-timespec
                  (list (quotient nsec #e1e9) (modulo nsec #e1e9))))
+
 (define (timespec->nsec ts)
   (match (parse-c-struct ts struct-timespec)
     ((sec nsec)
@@ -128,7 +117,7 @@
 ;; this 2-core, 2-thread-per-core skylake laptop:
 ;;
 ;; Clock type     | Applied Hz | Actual Hz | CPU time overhead (%)
-;; ---------------------------------------------------------------         
+;; ---------------------------------------------------------------
 ;; MONOTONIC        100          98           0.4
 ;; MONOTONIC        1000         873          4.4
 ;; MONOTONIC        10000        6242         6.4

@@ -1,6 +1,6 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
-;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016-2022 Free Software Foundation, Inc.
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -12,22 +12,23 @@
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
 ;;;;
-;;;; You should have received a copy of the GNU Lesser General Public
-;;;; License along with this library; if not, write to the Free Software
-;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+;;;; You should have received a copy of the GNU Lesser General Public License
+;;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;;
 
 (define-module (fibers)
   #:use-module (ice-9 match)
   #:use-module (ice-9 atomic)
-  #:use-module (fibers scheduler)
-  #:use-module (fibers repl)
-  #:use-module (fibers timers)
-  #:use-module (fibers interrupts)
   #:use-module (ice-9 threads)
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd port-write-wait-fd))
   #:use-module (ice-9 suspendable-ports)
+  #:use-module (fibers scheduler)
+  #:use-module (fibers repl)
+  #:use-module (fibers timers)
+  #:use-module (fibers interrupts)
+  #:use-module (fibers affinity)
+  #:use-module (fibers posix-clocks)
   #:export (run-fibers spawn-fiber)
   #:re-export (sleep))
 
@@ -71,11 +72,11 @@
   (let ((saved #f))
     (dynamic-wind
       (lambda ()
-        (set! saved (getaffinity 0))
-        (setaffinity 0 affinity))
+        (set! saved (getaffinity* 0))
+        (setaffinity* 0 affinity))
       (lambda () exp ...)
       (lambda ()
-        (setaffinity 0 saved)))))
+        (setaffinity* 0 saved)))))
 
 (define (%run-fibers scheduler hz finished? affinity)
   (with-affinity
@@ -127,7 +128,7 @@
 (define* (run-fibers #:optional (init #f)
                      #:key (hz 100) (scheduler #f)
                      (parallelism (current-processor-count))
-                     (cpus (getaffinity 0))
+                     (cpus (getaffinity* 0))
                      (install-suspendable-ports? #t)
                      (drain? #f))
   (when install-suspendable-ports? (install-suspendable-ports!))

@@ -1,5 +1,6 @@
 /* Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
  * Copyright (C) 2022 Ludovic Courtès <ludo@gnu.org>
+ * Copyright (C) 2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -11,10 +12,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 
@@ -28,6 +27,7 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <libguile.h>

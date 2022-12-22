@@ -1,6 +1,6 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
-;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016-2022 Free Software Foundation, Inc.
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -12,15 +12,14 @@
 ;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;;;; Lesser General Public License for more details.
 ;;;;
-;;;; You should have received a copy of the GNU Lesser General Public
-;;;; License along with this library; if not, write to the Free Software
-;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+;;;; You should have received a copy of the GNU Lesser General Public License
+;;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;;
 
 (define-module (fibers scheduler)
   #:use-module (srfi srfi-9)
+  #:use-module (fibers events-impl)
   #:use-module (fibers stack)
-  #:use-module (fibers epoll)
   #:use-module (fibers psq)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 control)
@@ -47,12 +46,12 @@
             yield-current-task))
 
 (define-record-type <scheduler>
-  (%make-scheduler epfd runcount-box prompt-tag
+  (%make-scheduler events-impl runcount-box prompt-tag
                    next-runqueue current-runqueue
                    fd-waiters timers kernel-thread
                    remote-peers choose-parallel-scheduler)
   scheduler?
-  (epfd scheduler-epfd)
+  (events-impl scheduler-events-impl)
   ;; atomic variable of uint32
   (runcount-box scheduler-runcount-box)
   (prompt-tag scheduler-prompt-tag)
@@ -102,7 +101,7 @@
 (define* (make-scheduler #:key parallelism
                          (prompt-tag (make-prompt-tag "fibers")))
   "Make a new scheduler in which to run fibers."
-  (let ((epfd (epoll-create))
+  (let ((events-impl (events-impl-create))
         (runcount-box (make-atomic-box 0))
         (next-runqueue (make-empty-stack))
         (current-runqueue (make-empty-stack))
@@ -111,7 +110,7 @@
                             (((t1 . c1) (t2 . c2)) (< t1 t2)))
                           <))
         (kernel-thread (make-atomic-parameter #f)))
-    (let* ((sched (%make-scheduler epfd runcount-box prompt-tag
+    (let* ((sched (%make-scheduler events-impl runcount-box prompt-tag
                                    next-runqueue current-runqueue
                                    fd-waiters timers kernel-thread
                                    #f #f))
@@ -174,7 +173,7 @@ This function is thread-safe even if @var{sched} is running on a
 remote kernel thread."
   (schedule-task/no-wakeup sched task)
   (unless (eq? ((scheduler-kernel-thread sched)) (current-thread))
-    (epoll-wake! (scheduler-epfd sched)))
+    (events-impl-wake! (scheduler-events-impl sched)))
   (values))
 
 (define (schedule-tasks-for-active-fd fd revents sched)
@@ -187,14 +186,14 @@ remote kernel thread."
      ;; finalizer on FD.
      (set-car! events+waiters 0)
      (set-cdr! events+waiters '())
-     (unless (zero? (logand revents (logior EPOLLHUP EPOLLERR)))
+     (unless (zero? (logand revents EVENTS_IMPL_CLOSED_OR_ERROR))
        (hashv-remove! (scheduler-fd-waiters sched) fd))
      ;; Now resume or re-schedule waiters, as appropriate.
      (let lp ((waiters waiters))
        (match waiters
          (() #f)
          (((events . task) . waiters)
-          (if (zero? (logand revents (logior events EPOLLHUP EPOLLERR)))
+          (if (zero? (logand revents (logior events EVENTS_IMPL_CLOSED_OR_ERROR)))
               ;; Re-schedule.
               (schedule-task-when-fd-active sched fd events task)
               ;; Resume.
@@ -231,18 +230,18 @@ remote kernel thread."
            ((expiry . task)
             expiry))))
   (define (update-expiry expiry)
-    ;; If there are pending tasks, cause epoll to return
+    ;; If there are pending tasks, cause the events backend to return
     ;; immediately.
     (if (stack-empty? (scheduler-next-runqueue sched))
         expiry
         0))
-  (epoll (scheduler-epfd sched)
-         #:expiry (timers-expiry (scheduler-timers sched))
-         #:update-expiry update-expiry
-         #:folder (lambda (fd revents sched)
-                    (schedule-tasks-for-active-fd fd revents sched)
-                    sched)
-         #:seed sched)
+  (events-impl-run (scheduler-events-impl sched)
+                   #:expiry (timers-expiry (scheduler-timers sched))
+                   #:update-expiry update-expiry
+                   #:folder (lambda (fd revents sched)
+                              (schedule-tasks-for-active-fd fd revents sched)
+                              sched)
+                   #:seed sched)
   (schedule-tasks-for-expired-timers sched))
 
 (define (work-stealer sched)
@@ -316,51 +315,35 @@ value.  Return zero values."
 
 (define (destroy-scheduler sched)
   "Release any resources associated with @var{sched}."
-  (epoll-destroy (scheduler-epfd sched)))
+  (events-impl-destroy (scheduler-events-impl sched)))
 
 (define (schedule-task-when-fd-active sched fd events task)
-  "Arrange for @var{sched} to schedule @var{task} when the file
-descriptor @var{fd} becomes active with any of the given @var{events},
-expressed as an epoll bitfield."
-  (define (fd-finalizer fd-waiters)
-    (lambda (fd)
-      ;; When a file port is closed, clear out the list of
-      ;; waiting tasks so that when/if this FD is re-used, we
-      ;; don't resume stale tasks.  Note that we don't need to
-      ;; remove the FD from the epoll set, as the kernel manages
-      ;; that for us.
-      ;;
-      ;; FIXME: Is there a way to wake all tasks in a thread-safe
-      ;; way?  Note that this function may be invoked from a
-      ;; finalizer thread.
-      (set-cdr! fd-waiters '())
-      (set-car! fd-waiters #f)))
-
+  "Arrange for @var{sched} to schedule @var{task} when the file descriptor
+@var{fd} becomes active with any of the given @var{events}."
   (let ((fd-waiters (hashv-ref (scheduler-fd-waiters sched) fd)))
     (match fd-waiters
       ((or #f (#f))                               ;FD is new or was finalized
        (let ((fd-waiters (list events (cons events task))))
          (hashv-set! (scheduler-fd-waiters sched) fd fd-waiters)
-         (add-fdes-finalizer! fd (fd-finalizer fd-waiters))
-         (epoll-add*! (scheduler-epfd sched) fd
-                      (logior events EPOLLONESHOT))))
+         (add-fdes-finalizer! fd (events-impl-fd-finalizer (scheduler-events-impl sched)
+                                                           fd-waiters))
+         (events-impl-add! (scheduler-events-impl sched) fd events)))
       ((active-events . waiters)
        (set-cdr! fd-waiters (acons events task waiters))
        (unless (= (logand events active-events) events)
          (let ((active-events (logior events active-events)))
            (set-car! fd-waiters active-events)
-           (epoll-add*! (scheduler-epfd sched) fd
-                        (logior active-events EPOLLONESHOT))))))))
+           (events-impl-add! (scheduler-events-impl sched) fd active-events)))))))
 
 (define (schedule-task-when-fd-readable sched fd task)
   "Arrange to schedule @var{task} on @var{sched} when the file
 descriptor @var{fd} becomes readable."
-  (schedule-task-when-fd-active sched fd (logior EPOLLIN EPOLLRDHUP) task))
+  (schedule-task-when-fd-active sched fd EVENTS_IMPL_READ task))
 
 (define (schedule-task-when-fd-writable sched fd task)
   "Arrange to schedule @var{k} on @var{sched} when the file descriptor
 @var{fd} becomes writable."
-  (schedule-task-when-fd-active sched fd EPOLLOUT task))
+  (schedule-task-when-fd-active sched fd EVENTS_IMPL_WRITE task))
 
 (define (schedule-task-at-time sched expiry task)
   "Arrange to schedule @var{task} when the absolute real time is

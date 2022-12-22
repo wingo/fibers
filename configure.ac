@@ -1,6 +1,8 @@
 define(FIBERS_CONFIGURE_COPYRIGHT,[[
 
-Copyright (C) 2016-2022 Andy Wingo <wingo@pobox.com>
+Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
+Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as
@@ -18,28 +20,22 @@ License along with this program.  If not, see
 
 ]])
 
-AC_PREREQ(2.52)
-AC_INIT([fibers], [1.1.1])
+AC_PREREQ([2.71])
+AC_INIT([fibers],[1.1.1])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIRS([m4])
-AM_INIT_AUTOMAKE([serial-tests])
+AM_INIT_AUTOMAKE([subdir-objects serial-tests -Werror foreign])
 AC_COPYRIGHT(FIBERS_CONFIGURE_COPYRIGHT)
-AM_CONFIG_HEADER(config.h)
+AC_CONFIG_HEADERS([config.h])
 
-AC_DISABLE_STATIC
-
-AC_ISC_POSIX
 AC_PROG_CC
-AC_STDC_HEADERS
-AC_PROG_LIBTOOL
 
-AC_CHECK_HEADERS([sys/epoll.h])
-AC_CHECK_FUNCS([epoll_create epoll_create1])
+LT_INIT([disable-static])
 
 AM_CONDITIONAL([CROSS_COMPILING], [test "x$cross_compiling" = "xyes"])
 
-if test "$cross_compiling" = "no"; then
+if test "x$cross_compiling" = "xno"; then
    GUILE_TARGET=""
 else
    GUILE_TARGET="--target=$host_alias"
@@ -47,9 +43,41 @@ fi
 AC_SUBST([GUILE_TARGET])
 
 WARN_CFLAGS=-Wall
-AC_ARG_ENABLE([Werror], AC_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
-        [], WARN_CFLAGS="-Wall -Werror")
+AC_ARG_ENABLE([Werror], AS_HELP_STRING([--disable-Werror],[Don't stop the build on errors]),
+    [], WARN_CFLAGS="-Wall -Werror")
 AC_SUBST(WARN_CFLAGS)
+
+AC_ARG_ENABLE([epoll], AS_HELP_STRING([--disable-epoll],[Disable epoll support]),
+    [disable_epoll=yes], [disable_epoll=no])
+
+AC_CHECK_FUNCS(epoll_wait)
+AM_CONDITIONAL([HAVE_EPOLL_WAIT], [test "x$ac_cv_func_epoll_wait" = "xyes"])
+
+AC_CHECK_FUNCS(clock_nanosleep)
+AM_CONDITIONAL([HAVE_CLOCK_NANOSLEEP], [test "x$ac_cv_func_clock_nanosleep" = "xyes"])
+
+# We should update `native_support` variable to yes if any native system
+# (e.g. epoll, kqueue) was found and not disabled.
+AS_IF([test "x$ac_cv_func_epoll_wait" = "xyes"],
+    [AS_IF([test "x$disable_epoll" = "xyes"], [native_support=no],[native_support=yes])],[native_support=no])
+
+# If there's no native support or it was disabled, try libevent.
+AS_IF([test "x$native_support" = "xno"],
+    [PKG_CHECK_MODULES([LIBEVENT], [libevent >= 2.1.0],[have_libevent=yes],
+        [AC_MSG_ERROR([Not found or disabled native support, and libevent was not found either])])])
+
+AM_CONDITIONAL([HAVE_LIBEVENT], [test "x$have_libevent" = "xyes"])
+
+# Detect the target system
+case "$host_os" in
+    *darwin*)
+        PLATFORM=darwin
+        ;;
+    *)
+        PLATFORM=generic
+        ;;
+esac
+AC_SUBST(PLATFORM)
 
 #
 # Check for Guile
