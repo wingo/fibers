@@ -49,7 +49,6 @@ SOURCES = \
 	web/server/fibers.scm
 
 BUILT_SOURCES = \
-	fibers/affinity.scm \
 	fibers/config.scm \
 	fibers/events-impl.scm \
 	fibers/posix-clocks.scm
@@ -94,16 +93,11 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-fibers/affinity.scm: Makefile fibers/affinity-$(PLATFORM).scm
-	mkdir -p $(abs_top_builddir)/fibers
-	cp -f $(abs_top_srcdir)/fibers/affinity-$(PLATFORM).scm $(abs_top_builddir)/fibers/affinity.scm
-
 fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
 	mkdir -p $(abs_top_builddir)/fibers
 	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
 
 CLEANFILES += \
-	fibers/affinity.scm \
 	fibers/config.scm \
 	fibers/events-impl.scm \
 	fibers/posix-clocks.scm
@@ -139,8 +133,6 @@ EXTRA_DIST += \
 	fibers/config.scm.in \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
-	fibers/affinity-darwin.scm \
-	fibers/affinity-generic.scm \
 	fibers/posix-clocks-darwin.scm \
 	fibers/posix-clocks-generic.scm \
 	examples
