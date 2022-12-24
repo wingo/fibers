@@ -336,6 +336,12 @@ init_fibers_libevt (void)
   scm_c_define ("EVPERSIST", scm_from_int (EV_PERSIST));
   scm_c_define ("EVCLOSED", scm_from_int (EV_CLOSED));
 
+  /* Corresponding events, compared to epoll, found at
+     https://github.com/libevent/libevent/blob/master/epoll.c  */
+  scm_c_define ("EVENTS_IMPL_READ", scm_from_int (EV_READ | EV_CLOSED));
+  scm_c_define ("EVENTS_IMPL_WRITE", scm_from_int (EV_WRITE));
+  scm_c_define ("EVENTS_IMPL_CLOSED_OR_ERROR", scm_from_int (EV_READ | EV_WRITE));
+
 #if SCM_MAJOR_VERSION == 2
   /* Guile 2.2.7 lacks a definition for O_CLOEXEC.  */
   scm_c_define ("O_CLOEXEC", scm_from_int (O_CLOEXEC));

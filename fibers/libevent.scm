@@ -174,12 +174,6 @@
               (lp (folder fd events seed) (1+ i)))
             seed)))))
 
-;; Corresponding events, compared to epoll, found at
-;; https://github.com/libevent/libevent/blob/master/epoll.c
-(define EVENTS_IMPL_READ (logior EVREAD EVCLOSED))
-(define EVENTS_IMPL_WRITE EVWRITE)
-(define EVENTS_IMPL_CLOSED_OR_ERROR (logior EVREAD EVWRITE))
-
 (define events-impl-create libevt-create)
 
 (define events-impl-destroy libevt-destroy)
