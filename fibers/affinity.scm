@@ -1,4 +1,4 @@
-;; CPU affinity (Darwin)
+;; CPU affinity
 
 ;;;; Copyright (C) 2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 ;;;;
@@ -25,13 +25,23 @@
   #:export (getaffinity* setaffinity*))
 
 ;;
-;; It seems it is not possible to link a thread to a specific core on
-;; macOS. See, for example: https://developer.apple.com/forums/thread/44002.
+;; Some platforms don't implement (getaffinity) or (setaffinity).
 ;;
-;; So for now getaffinity/setaffinity are no-ops.
+;; For example, it seems it is not possible to link a thread to a specific core
+;; on macOS. See: https://developer.apple.com/forums/thread/44002.
+;;
+;; So for now getaffinity/setaffinity are no-ops on those paltforms.
 ;;
 
-(define (getaffinity* pid)
-  (make-bitvector (current-processor-count) 1))
+;; getaffinity/setaffinity should be defined in Guile
+(define getaffinity*
+  (cond
+   ((defined? 'getaffinity) getaffinity)
+   (else
+    (lambda (pid)
+      (make-bitvector (current-processor-count) 1)))))
 
-(define (setaffinity* pid affinity) *unspecified*)
+(define setaffinity*
+  (cond
+   ((defined? 'setaffinity) setaffinity)
+   (else (lambda (pid affinity) *unspecified*))))
