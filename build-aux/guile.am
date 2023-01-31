@@ -1,13 +1,14 @@
-if CROSS_COMPILING
-CROSS_COMPILING_VARIABLE = FIBERS_CROSS_COMPILING=yes
-else
-CROSS_COMPILING_VARIABLE =
-endif
-
 GOBJECTS = $(SOURCES:%.scm=%.go)
 
 nobase_mod_DATA = $(SOURCES) $(NOCOMP_SOURCES)
 nobase_go_DATA = $(GOBJECTS)
+
+# This is like adding the files to moddir and godir directly, except for
+# dropping the 'override' prefix that is only needed for cross-compilation.
+fibersdir = $(moddir)/fibers
+gofibersdir = $(godir)/fibers
+nodist_fibers_DATA = override/fibers/events-impl.scm override/fibers/posix-clocks.scm
+nodist_gofibers_DATA = override/fibers/events-impl.go override/fibers/posix-clocks.go
 
 # Make sure source files are installed first, so that the mtime of
 # installed compiled files is greater than that of installed source
@@ -22,6 +23,6 @@ EXTRA_DIST = $(SOURCES) $(NOCOMP_SOURCES)
 GUILE_WARNINGS = -Wunbound-variable -Warity-mismatch -Wformat
 SUFFIXES = .scm .go
 .scm.go:
-	$(AM_V_GEN)$(CROSS_COMPILING_VARIABLE) $(top_builddir)/env	\
+	$(AM_V_GEN) $(top_builddir)/env	\
 	  $(GUILE_TOOLS) compile $(GUILE_TARGET) -L "$(abs_top_srcdir)"	\
 	  $(GUILE_WARNINGS) -o "$@" "$<"

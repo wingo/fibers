@@ -2,6 +2,7 @@
 # Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 # Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
 # Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+# Copyright (C) 2023 Maxime Devos <maximedevos@telenet.be>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
@@ -26,6 +27,10 @@ godir=$(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/site-ccache
 
 info_TEXINFOS=fibers.texi
 
+# Don't include fibers/events-impl.scm in here even though it's a source file,
+# otherwise "make install" will install fibers/events-impl.scm even though
+# shouldn't.  Likewise for fibers/posix-clocks.scm.
+
 SOURCES = \
 	fibers.scm \
 	fibers/affinity.scm \
@@ -33,13 +38,11 @@ SOURCES = \
 	fibers/conditions.scm \
 	fibers/config.scm \
 	fibers/counter.scm \
-	fibers/events-impl.scm \
 	fibers/deque.scm \
 	fibers/interrupts.scm \
 	fibers/io-wakeup.scm \
 	fibers/nameset.scm \
 	fibers/operations.scm \
-	fibers/posix-clocks.scm \
 	fibers/psq.scm \
 	fibers/repl.scm \
 	fibers/scheduler.scm \
@@ -50,8 +53,8 @@ SOURCES = \
 
 BUILT_SOURCES = \
 	fibers/config.scm \
-	fibers/events-impl.scm \
-	fibers/posix-clocks.scm
+	override/fibers/events-impl.scm \
+	override/fibers/posix-clocks.scm
 
 extlibdir = $(libdir)/guile/$(GUILE_EFFECTIVE_VERSION)/extensions
 AM_CFLAGS = -I$(srcdir) $(WARN_CFLAGS) $(DEBUG_CFLAGS)
@@ -65,8 +68,9 @@ fibers_libevent_la_CFLAGS = $(AM_CFLAGS) $(GUILE_CFLAGS) $(LIBEVENT_CFLAGS) -I$(
 fibers_libevent_la_LDFLAGS = -module -no-undefined $(LIBEVENT_LIBS) $(GUILE_LDFLAGS)
 $(GOBJECTS): fibers-libevent.la
 
-fibers/events-impl.scm: Makefile fibers/libevent.scm
-	cp -f $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/fibers/events-impl.scm
+override/fibers/events-impl.scm: Makefile fibers/libevent.scm
+	mkdir -p $(abs_top_builddir)/override/fibers
+	cp -f $(abs_top_srcdir)/fibers/libevent.scm $(abs_top_builddir)/override/fibers/events-impl.scm
 else
 if HAVE_EPOLL_WAIT
 extlib_LTLIBRARIES += fibers-epoll.la
@@ -76,8 +80,9 @@ fibers_epoll_la_LIBADD = $(GUILE_LIBS)
 fibers_epoll_la_LDFLAGS = -export-dynamic -module
 $(GOBJECTS): fibers-epoll.la
 
-fibers/events-impl.scm: Makefile fibers/epoll.scm
-	cp -f $(abs_top_srcdir)/fibers/epoll.scm $(abs_top_builddir)/fibers/events-impl.scm
+override/fibers/events-impl.scm: Makefile fibers/epoll.scm
+	mkdir -p $(abs_top_builddir)/override/fibers
+	cp -f $(abs_top_srcdir)/fibers/epoll.scm $(abs_top_builddir)/override/fibers/events-impl.scm
 endif
 endif
 
@@ -93,14 +98,16 @@ fibers/config.scm: Makefile fibers/config.scm.in
 	sed -e "s|@extlibdir\@|$(extlibdir)|" \
 	    $(srcdir)/fibers/config.scm.in > fibers/config.scm
 
-fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
-	mkdir -p $(abs_top_builddir)/fibers
-	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/fibers/posix-clocks.scm
+override/fibers/posix-clocks.scm: Makefile fibers/posix-clocks-$(PLATFORM).scm
+	mkdir -p $(abs_top_builddir)/override/fibers
+	cp -f $(abs_top_srcdir)/fibers/posix-clocks-$(PLATFORM).scm $(abs_top_builddir)/override/fibers/posix-clocks.scm
 
 CLEANFILES += \
 	fibers/config.scm \
-	fibers/events-impl.scm \
-	fibers/posix-clocks.scm
+	override/fibers/events-impl.go \
+	override/fibers/posix-clocks.go \
+	override/fibers/events-impl.scm \
+	override/fibers/posix-clocks.scm
 
 TESTS = \
 	tests/basic.scm \
@@ -131,8 +138,10 @@ EXTRA_DIST += \
 	README.md \
 	TODO.md \
 	fibers/config.scm.in \
+	fibers/events-impl.scm \
 	fibers/epoll.scm \
 	fibers/libevent.scm \
+	fibers/posix-clocks.scm \
 	fibers/posix-clocks-darwin.scm \
 	fibers/posix-clocks-generic.scm \
 	examples
