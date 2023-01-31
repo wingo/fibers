@@ -30,7 +30,7 @@
   #:use-module (fibers affinity)
   #:use-module (fibers posix-clocks)
   #:export (run-fibers spawn-fiber)
-  #:re-export (sleep))
+  #:re-export (sleep dynamic-wind*))
 
 ;; Guile 2 and 3 compatibility. Some bit vector related procedures were
 ;; deprecated in Guile 3.0.3 and new ones were defined.

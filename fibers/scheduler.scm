@@ -1,6 +1,8 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016-2022 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2022, 2023 Maxime Devos <maximedevos@telenet.be>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -42,8 +44,11 @@
             schedule-task-when-fd-writable
             schedule-task-at-time
 
+            rewinding-for-scheduling?
             suspend-current-task
-            yield-current-task))
+            yield-current-task
+	    dynamic-wind*
+            %nesting-test-1? %nesting-test-2?))
 
 (define-record-type <scheduler>
   (%make-scheduler events-impl runcount-box prompt-tag
@@ -261,6 +266,25 @@ any pending timeouts."
             (stack-empty? (scheduler-current-runqueue sched))
             (stack-empty? (scheduler-next-runqueue sched)))))
 
+;; Effectively a per-fiber variable, because of how the dynamic state
+;; is set up in fibers.scm.
+(define rewinding-for-scheduling?
+  (make-parameter #false))
+
+;; TODO: would be nice if @code{dynamic-wind} was backed by some
+;; parameter, then users could be Fibers-agnostic.
+(define (dynamic-wind* in-guard thunk out-guard)
+  "Like regular @code{dynamic-wind}, but ignore @var{in-guard} and
+@var{out-guard} during suspension and resumption of tasks."
+  (dynamic-wind
+      (lambda ()
+	(unless (rewinding-for-scheduling?)
+	  (in-guard)))
+      thunk
+      (lambda ()
+	(unless (rewinding-for-scheduling?)
+	  (out-guard)))))
+
 (define* (run-scheduler sched finished?)
   "Run @var{sched} until calling @code{finished?} returns a true
 value.  Return zero values."
@@ -367,7 +391,18 @@ passed to the @var{after-suspend} handler is the continuation of the
   (let ((tag (scheduler-prompt-tag (current-scheduler))))
     (unless (suspendable-continuation? tag)
       (error "Attempt to suspend fiber within continuation barrier"))
-    (abort-to-prompt tag after-suspend)))
+    (rewinding-for-scheduling? #true)
+    (call-with-values
+	(lambda ()
+	  (abort-to-prompt tag after-suspend))
+      (lambda result
+	(rewinding-for-scheduling? #false)
+	(apply values result)))))
+
+(define %nesting-test-1? #false)
+(define %nesting-test-2? #false)
+(set! %nesting-test-1? #false)
+(set! %nesting-test-2? #false)
 
 (define* (yield-current-task)
   "Yield control to the current scheduler.  Like calling
@@ -379,6 +414,30 @@ suspending if the current continuation isn't suspendable.  Returns
     (sched
      (let ((tag (scheduler-prompt-tag sched)))
        (and (suspendable-continuation? tag)
-            (begin
+	    ;; It is possible for %run-fibers to run
+	    ;; 'yield-current-task' right before 'abort-to-prompt'.
+	    ;;
+	    ;; If so, it is important that it doesn't change
+	    ;; the 'rewinding' boolean back to #false,
+	    ;; otherwise scheduling rewinding would happen with
+	    ;; an incorrect value of the rewinding boolean.
+	    ;;
+	    ;; That's the reason for the (unless old ...)
+	    ;; conditionals.
+	    ;;
+	    ;; suspend-current-task isn't used by the interrupt
+	    ;; code, so it doesn't need a similar change.
+            (let ((nested? (rewinding-for-scheduling?)))
+	      (unless nested?
+		(rewinding-for-scheduling? #true))
+              ;; It is highly unlikely for 'nested?' to be #true
+              ;; in practice, so for tests add an option to
+              ;; force this situation to happen.
+              (when (and (not nested?) %nesting-test-1?)
+                (yield-current-task))
               (abort-to-prompt tag schedule-task)
+              (when (and (not nested?) %nesting-test-2?)
+                (yield-current-task))
+	      (unless nested?
+		(rewinding-for-scheduling? #false))
               #t))))))
