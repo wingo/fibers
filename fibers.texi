@@ -12,8 +12,8 @@ This manual is for Fibers (version @value{VERSION}, updated
 @value{UPDATED})
 
 @noindent
-Copyright 2016, 2023 Andy Wingo@*
-Copyright 2021 Maxime Devos@*
+Copyright 2016-2023 Andy Wingo
+Copyright 2021, 2023 Maxime Devos
 Copyright 2022, 2023 Aleix Conchillo Flaqué
 
 @quotation
@@ -927,6 +927,7 @@ few pitfalls to be aware of though.
 * Barriers::            Avoid suspending inside continuation barriers.
 * Mutation::            Avoid unstructured mutation of shared data.
 * Mutexes::             Mutexes and fibers don't mix very well.
+* dynamic-wind::        dynamic-wind and preemption often don't mix well.
 @end menu
 
 @node Blocking
@@ -1128,6 +1129,63 @@ users try atomic boxes or channels instead.  If you do use mutexes,
 make sure you disable preemption (possibly by a local call to
 @code{call-with-blocked-asyncs}), and take care to never suspend a
 fiber while it owns any mutex.
+
+@node dynamic-wind
+@section dynamic-wind
+
+If you use Guile's @code{dynamic-wind} and rescheduling happens when
+the thunk is being run (due to a blocking condition, preemption or
+some other reason), the out-guard will be run.  Later, when fiber is
+resumed, the in-guard will be run and the thunk continues.
+
+While this is @code{dynamic-wind} functioning as intended, for some
+common use cases of @code{dynamic-wind} this is intended behaviour is
+actually undesired.  For example, take the following Scheme
+implementation of Python's @code{with} construct:
+
+@example
+(define (with resource close-resource use-resource)
+  (dynamic-wind
+    (lambda () #false) ; in-guard
+    (lambda () (use-resource resource)) ; thunk
+    (lambda () (close-resource resource)))) ; out-guard
+;; Example usage:
+(use-modules (srfi srfi-26))
+(with (open-file "greetings" "w") close-port (cut display "hi" <>))
+;; The idea is to always close the port at the end, even if
+;; 'display' throws an exception.
+@end example
+
+The problem here, is that if preemption happens when writing ``hi'' to
+``greetings'', then the port is prematurely closed -- when the fiber
+is resumed, the writing would continue on a closed port, which is not
+going to work.
+
+It is therefore required to ignore the in-guard and out-guard when
+preempting.  This is implemented by the procedure @code{dynamic-wind*}
+from @code{(fibers scheduler)} and re-exported from @code{(fibers)}.
+It behaves exactly like @code{dynamic-wind}, except for not running
+the in-guard and out-guard when rescheduling.
+
+However, this does not mean that all uses of @code{dynamic-wind}
+should be replaced with @code{dynamic-wind*}!  There exist some valid
+uses for @code{dynamic-wind} that would break when replaced with
+@code{dynamic-wind*}.  For example, @code{dynamic-wind} can be used to
+temporarily change the curent working directory of the process.  As
+the working directory needs to be restored even when just
+rescheduling, @code{dynamic-wind*} would be incorrect there.
+
+(You also need to make sure there is only a single kernel thread
+that's playing with working directories, for example by setting
+@code{#:parallelism 1}, but that's unrelated to @code{dynamic-wind}
+and @code{dynamic-wind*}.)
+
+For Scheme libraries that would otherwise be fibers-agnostic, it can
+be a bit inconvenient to have to use @code{dynamic-wind*} instead of
+Guile's @code{dynamic-wind}.  At time of writing, no solution is
+available for this problem yet.  However, it is considered likely that
+eventually @code{dynamic-wind*} will be moved to Guile itself in some
+form, eventually solving the problem.
 
 @node Examples
 @chapter Examples

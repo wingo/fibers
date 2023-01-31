@@ -1,6 +1,8 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016, 2023 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2023 Maxime Devos <maximedevos@telenet.be>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -17,7 +19,9 @@
 ;;;;
 
 (define-module (tests basic)
-  #:use-module (fibers))
+  #:use-module (fibers)
+  #:use-module (fibers conditions)
+  #:use-module (fibers scheduler))
 
 (define failed? #f)
 
@@ -50,10 +54,10 @@
                                       1.0 internal-time-units-per-second))
           (apply values vals))))))
 
-(define-syntax-rule (assert-run-fibers-returns (expected ...) exp)
+(define-syntax-rule (assert-run-fibers-returns (expected ...) exp kw ...)
   (begin
     (call-with-values (lambda ()
-                        (assert-run-fibers-terminates exp #:drain? #t))
+                        (assert-run-fibers-terminates exp #:drain? #t kw ...))
       (lambda run-fiber-return-vals
         (assert-equal '(expected ...) run-fiber-return-vals)))))
 
@@ -62,6 +66,150 @@
     (let ((count (1- count)))
       exp
       (unless (zero? count) (lp count)))))
+
+(define (no-rewinding)
+  (when (rewinding-for-scheduling?)
+    (error "rewinding-for-scheduling?=#true should be invisible to users of dynamic-wind*")))
+
+;; Test some functionality of dynamic-wind*
+(define (run-dynamic-wind-loop N poke)
+  (let loop ((n 0))
+    (define in-entered? #false)
+    (define in-left? #false)
+    (define thunk-entered? #false)
+    (define thunk-left? #false)
+    (define out-entered? #false)
+    (define out-left? #false)
+    (define (expect where a b c d e f)
+      (define s (list in-entered? in-left? thunk-entered? thunk-left? out-entered? out-left?))
+      (define t (list a b c d e f))
+      (unless (equal? s t)
+	(pk #:for where
+	    #:expected t
+	    #:got s)
+	(error "wrong state")))
+    (dynamic-wind*
+     (lambda ()
+       (no-rewinding)
+       (expect 'in-guard #f #f #f #f #f #f)
+       (set! in-entered? #true)
+       (poke)
+       (no-rewinding)
+       (expect 'in-guard #t #f #f #f #f #f)
+       (poke)
+       (no-rewinding)
+       (expect 'in-guard #t #f #f #f #f #f)
+       (set! in-left? #true))
+     (lambda ()
+       (no-rewinding)
+       (expect 'thunk #t #t #f #f #f #f)
+       (set! thunk-entered? #true)
+       (poke)
+       (no-rewinding)
+       (expect 'thunk #t #t #t #f #f #f)
+       (poke)
+       (no-rewinding)
+       (expect 'thunk #t #t #t #f #f #f)
+       (set! thunk-left? #true))
+     (lambda ()
+       (no-rewinding)
+       (expect 'out-guard #t #t #t #t #f #f)
+       (set! out-entered? #true)
+       (poke)
+       (no-rewinding)
+       (expect 'out-guard #t #t #t #t #t #f)
+       (poke)
+       (no-rewinding)
+       (expect 'out-guard #t #t #t #t #t #f)
+       (set! out-left? #true)))
+    (expect 'post-loop #t #t #t #t #t #t)
+    (when (< n N)
+      (loop (+ n 1)))))
+
+(define (test-dynamic-wind-loop N hz poke)
+  (format #t "Testing dynamic-wind* ...~%")
+  (run-fibers
+   (lambda ()
+     (run-dynamic-wind-loop N poke))
+   #:hz hz)
+  (format #t "ok!~%"))
+
+(define (poke-no-op) (values))
+(define (poke-reschedule1)
+  (suspend-current-task schedule-task))
+(define (poke-reschedule2)
+  (yield-current-task))
+
+(define (poke-maybe-hook reschedule)
+  (define (random-boolean)
+    (= (random 2) 0))
+  (set! %nesting-test-1? (random-boolean))
+  (set! %nesting-test-2? (random-boolean))
+  (reschedule))
+(define (reset!)
+  (set! %nesting-test-1? #false)
+  (set! %nesting-test-2? #false))
+
+;; dynamic-wind* in a loop, no preemption
+(test-dynamic-wind-loop 7000 0 poke-no-op)
+(reset!)
+
+;; dynamic-wind* in a loop, preemption
+(test-dynamic-wind-loop 70000 10000 poke-reschedule1)
+(reset!)
+(test-dynamic-wind-loop 70000 10000 poke-reschedule2)
+(reset!)
+
+;; dynamic-wind* in a loop, preemption, multiple threads.
+(define (concurrency-test poke)
+  (format #t "Testing dynamic-wind* in a loop with concurrency and preemption ...~%")
+  (run-fibers
+   (lambda ()
+     (define start (make-condition))
+     (define (spawn)
+       (define c (make-condition))
+       (spawn-fiber
+	(lambda ()
+	  (wait start)
+	  (run-dynamic-wind-loop 30000 poke)
+	  (signal-condition! c))
+	#:parallel? #true) ; maximal concurrency
+       c)
+     (let loop ((i 5) ; 5 fibers
+		(conditions-to-wait-for '()))
+       (if (> i 0)
+	   (loop (- i 1)
+		 (cons (spawn) conditions-to-wait-for))
+	   (begin
+	     ;; Start all fibers the same time,
+	     ;; for maximal concurrency.
+	     (signal-condition! start)
+	     (for-each wait conditions-to-wait-for)))))
+   #:hz 100000
+   #:parallelism 6)) ; 'main' fiber and fibers make with 'spawn'.
+
+;; The 'poke' procedures modify the global variables
+;; %nesting-test-1? and %nesting-test-2? without any mutexes
+;; or atomics or such, but it's just for tests, so should
+;; be fine.
+(concurrency-test poke-reschedule1)
+(reset!)
+(concurrency-test poke-reschedule2)
+(reset!)
+
+
+;; dynamic-wind* in a loop, with high likelihood of
+;; (simulated) nesting, only simulated preemption
+;;
+;; There is no similar test for poke-reschedule1, because
+;; the real preemption code uses poke-reschedule2 instead
+;; of poke-reschedule1.
+(test-dynamic-wind-loop 70000 0 (lambda () (poke-maybe-hook poke-reschedule2)))
+(reset!)
+
+;; The code for simulated nesting wasn't written with
+;; real preemption in mind.
+;; (test-dynamic-wind-loop 10000 10000 (lambda () (poke-maybe-hook ...)))
 
 (assert-equal #f #f)
 (assert-terminates #t)
