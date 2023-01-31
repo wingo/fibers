@@ -20,7 +20,7 @@ License along with this program.  If not, see
 
 ]])
 
-AC_PREREQ([2.71])
+AC_PREREQ([2.69])
 AC_INIT([fibers],[1.2.0])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
