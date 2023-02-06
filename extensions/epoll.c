@@ -1,5 +1,5 @@
 /* Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
- * Copyright (C) 2022 Ludovic Courtès <ludo@gnu.org>
+ * Copyright (C) 2022, 2023 Ludovic Courtès <ludo@gnu.org>
  * Copyright (C) 2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -220,9 +220,11 @@ scm_primitive_epoll_wait (SCM epfd, SCM wakefd, SCM wokefd,
 
 static SCM sym_read_pipe, sym_write_pipe;
 
+/* Note: Guile 3.0.9 introduced an 'scm_pipe2' function, which is marked as
+   'SCM_INTERNAL'.  Use a different name here to avoid a collision.  */
 static SCM
-scm_pipe2 (SCM flags)
-#define FUNC_NAME "scm_pipe2"
+scm_fibers_pipe2 (SCM flags)
+#define FUNC_NAME "scm_fibers_pipe2"
 {
   int c_flags, ret, fd[2];
   SCM read_port, write_port;
@@ -279,7 +281,7 @@ init_fibers_epoll (void)
   scm_c_define ("EPOLL_CTL_MOD", scm_from_int (EPOLL_CTL_MOD));
   scm_c_define ("EPOLL_CTL_DEL", scm_from_int (EPOLL_CTL_DEL));
 
-  scm_c_define_gsubr ("pipe2", 0, 1, 0, scm_pipe2);
+  scm_c_define_gsubr ("pipe2", 0, 1, 0, scm_fibers_pipe2);
   sym_read_pipe = scm_from_latin1_string ("read pipe");
   sym_write_pipe = scm_from_latin1_string ("write pipe");
 
