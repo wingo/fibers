@@ -26,13 +26,10 @@
              (guix licenses)
              (guix packages)
              (gnu packages)
-             (gnu packages autotools)
-             (gnu packages gettext)
-             (gnu packages guile)
-             (gnu packages pkg-config)
-             (gnu packages texinfo))
+             (gnu packages pkg-config))
 
 (define %source-dir (dirname (current-filename)))
+(define S specification->package)
 
 (define guile-fibers
   (package
@@ -42,14 +39,12 @@
                         #:recursive? #t
                         #:select? (git-predicate %source-dir)))
     (build-system gnu-build-system)
-    (native-inputs `(("autoconf" ,autoconf)
-                     ("automake" ,automake)
-                     ("libtool" ,libtool)
-                     ("pkg-config" ,pkg-config)
-                     ("texinfo" ,texinfo)
-                     ("gettext" ,gettext-minimal)))
+    (native-inputs
+     (append (list pkg-config)
+             (map S '("autoconf" "automake" "libtool"
+                      "texinfo" "gettext-minimal"))))
     (inputs
-     `(("guile" ,guile-2.2)))
+     (list (S "guile")))
     (arguments
      `(#:phases (modify-phases %standard-phases
                   (add-before 'configure 'bootstrap
