@@ -52,6 +52,8 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 * Pitfalls::              Stay on the happy path.
 * Examples::              Starting points for a hack.
 * Status::                Fibers is a work in progress.
+
+* Index::                 Index of concepts and procedures.
 @end menu
 
 @end ifnottex
@@ -1419,11 +1421,11 @@ Guile now has a solid concurrency story.  Use fibers, incorporate it
 directly into your project, fork it, improve it: what happens now is
 up to you.  Happy hacking and godspeed!
 
-@c @node Concept Index
-@c @unnumbered Concept Index
-@c @printindex cp
-@c @node Function Index
-@c @unnumbered Function Index
-@c @printindex fn
+@node Index
+@unnumbered Index
+@printindex cp
+@syncodeindex tp fn
+@syncodeindex vr fn
+@printindex fn
 
 @bye
