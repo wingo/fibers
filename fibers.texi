@@ -11,8 +11,9 @@
 This manual is for Fibers (version @value{VERSION}, updated
 @value{UPDATED})
 
-Copyright 2016 Andy Wingo
-Copyright 2021 Maxime Devos
+@noindent
+Copyright 2016 Andy Wingo@*
+Copyright 2021 Maxime Devos@*
 Copyright 2022 Aleix Conchillo Flaqué
 
 @quotation
