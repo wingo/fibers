@@ -35,28 +35,22 @@
 ;; Guile 2 and 3 compatibility. Some bit vector related procedures were
 ;; deprecated in Guile 3.0.3 and new ones were defined.
 (define bitvector-count*
-  (cond-expand
-   (guile-3
-    (if (defined? 'bitvector-count)
-        bitvector-count
-        (lambda (v) (bit-count #t v))))
-   (guile-2 (lambda (v) (bit-count #t v)))))
+  (or (and=> (module-variable the-scm-module 'bitvector-count)
+             variable-ref)
+      (lambda (v)
+        (bit-count #t v))))
 
 (define bitvector-position*
-  (cond-expand
-   (guile-3
-    (if (defined? 'bitvector-position)
-        bitvector-position
-        (lambda (v b i) (bit-position b v i))))
-   (guile-2 (lambda (v b i) (bit-position b v i)))))
+  (or (and=> (module-variable the-scm-module 'bitvector-position)
+             variable-ref)
+      (lambda (v b i)
+        (bit-position b v i))))
 
 (define bitvector-set-bit!*
-  (cond-expand
-   (guile-3
-    (if (defined? 'bitvector-set-bit!)
-        bitvector-set-bit!
-        (lambda (v i) (bitvector-set! v i #t))))
-   (guile-2 (lambda (v i) (bitvector-set! v i #t)))))
+  (or (and=> (module-variable the-scm-module 'bitvector-set-bit!)
+             variable-ref)
+      (lambda (v i)
+        (bitvector-set! v i #t))))
 ;; End of Guile 2 and 3 compatibility.
 
 (define (wait-for-readable port)
