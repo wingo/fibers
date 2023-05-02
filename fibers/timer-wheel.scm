@@ -237,10 +237,10 @@
   (match wheel
     (($ <timer-wheel> time-base shift cur slots outer)
      (let ((inc (ash 1 shift)))
-       (let lp ((next-tick (next-tick-time time-base cur shift)))
-         (when (<= next-tick t)
+       (let lp ((next-tick-end (+ (next-tick-time time-base cur shift) inc)))
+         (when (< next-tick-end t)
            (tick!)
-           (lp (+ next-tick inc))))))))
+           (lp (+ next-tick-end inc))))))))
 
 (define (self-test)
   (define start (get-internal-real-time))
@@ -282,6 +282,11 @@
     (when (<= tick-end t)
       (error "tick early" tick-start t tick-end)))
 
-  (timer-wheel-advance! wheel end check!)
+  ;; The precision of the timer is at least milliseconds, and it won't
+  ;; advance until all time in the current tick has passed, to to get
+  ;; all the events we need to advance by an additional millisecond.
+  (define millisecond
+    (inexact->exact (ceiling (* 1e-3 internal-time-units-per-second))))
+  (timer-wheel-advance! wheel (+ end millisecond) check!)
   (unless (= count event-count) (error "what4"))
   #t)
