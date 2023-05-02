@@ -48,13 +48,15 @@
   (obj timer-entry-obj))
 
 (define-record-type <timer-wheel>
-  (%make-timer-wheel time-base shift cur slots outer)
+  (%make-timer-wheel time-base shift cur slots outer next-entry-time)
   timer-wheel?
   (time-base timer-wheel-time-base set-timer-wheel-time-base!)
   (shift timer-wheel-shift)
   (cur timer-wheel-cur set-timer-wheel-cur!)
   (slots timer-wheel-slots)
-  (outer timer-wheel-outer set-timer-wheel-outer!))
+  (outer timer-wheel-outer set-timer-wheel-outer!)
+  (next-entry-time %timer-wheel-next-entry-time
+                   set-timer-wheel-next-entry-time!))
 
 (define (push-timer-entry! entry head)
   (match head
@@ -94,6 +96,7 @@
                      shift
                      (time->slot-index now shift)
                      (make-slots)
+                     #f
                      #f))
 
 (define (add-outer-wheel! inner)
@@ -115,7 +118,10 @@
 
 (define (timer-wheel-add! wheel t obj)
   (match wheel
-    (($ <timer-wheel> time-base shift cur slots outer)
+    (($ <timer-wheel> time-base shift cur slots outer next-entry-time)
+     (unless (eq? next-entry-time 'unknown)
+       (when (or (not next-entry-time) (< t next-entry-time))
+         (set-timer-wheel-next-entry-time! wheel t)))
      (let ((offset (ash (- t (next-tick-time time-base cur shift))
                         (- shift))))
        (cond
@@ -135,26 +141,33 @@
           (match entry
             (($ <timer-entry> prev next t obj)
              (lp next (if (and min (< min t)) min t)))))))
+  (define (compute-next-entry-time cur slots outer)
+    (let lp ((i 0))
+      (cond
+       ((< i *slots*)
+        (match (slot-min-time
+                (vector-ref slots (logand (+ cur i) *slots-mask*)))
+          (#f (lp (1+ i))) ;; Empty slot.
+          (t
+           ;; Unless we just migrated entries from outer to inner wheel
+           ;; on the last tick, outer wheel overlaps with inner.
+           (let ((outer-t (match outer
+                            (#f #f)
+                            (($ <timer-wheel> time-base shift cur slots outer)
+                             (slot-min-time (vector-ref slots cur))))))
+             (if outer-t
+                 (min t outer-t)
+                 t)))))
+       (outer (timer-wheel-next-entry-time outer))
+       (else #f))))
   (match wheel
-    (($ <timer-wheel> time-base shift cur slots outer)
-     (let lp ((i 0))
-       (cond
-        ((< i *slots*)
-         (match (slot-min-time
-                 (vector-ref slots (logand (+ cur i) *slots-mask*)))
-           (#f (lp (1+ i))) ;; Empty slot.
-           (t
-            ;; Unless we just migrated entries from outer to inner wheel
-            ;; on the last tick, outer wheel overlaps with inner.
-            (let ((outer-t (match outer
-                             (#f #f)
-                             (($ <timer-wheel> time-base shift cur slots outer)
-                              (slot-min-time (vector-ref slots cur))))))
-              (if outer-t
-                  (min t outer-t)
-                  t)))))
-        (outer (timer-wheel-next-entry-time outer))
-        (else #f))))))
+    (($ <timer-wheel> time-base shift cur slots outer next-entry-time)
+     (match next-entry-time
+       ('unknown
+        (let ((t (compute-next-entry-time cur slots outer)))
+          (set-timer-wheel-next-entry-time! wheel t)
+          t))
+       (t t)))))
 
 (define* (timer-wheel-dump wheel #:key (port (current-output-port))
                            (level 0)
@@ -199,6 +212,7 @@
                  (else
                   (match entry
                     (($ <timer-entry> _ next t obj)
+                     (set-timer-wheel-next-entry-time! wheel 'unknown)
                      (set-timer-entry-next! head next)
                      (set-timer-entry-prev! next head)
                      (visit-timer-entry! entry t obj)
