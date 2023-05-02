@@ -26,13 +26,16 @@
   (define one-hour (* 60 60 internal-time-units-per-second))
   ;; At millisecond precision, advancing the wheel by an hour shouldn't
   ;; take perceptible time.
-  (timer-wheel-advance! wheel one-hour error)
+  (define start+one-hour
+    (let ((t (+ start one-hour)))
+      (timer-wheel-advance! wheel t error)
+      t))
 
   ;; (timer-wheel-dump wheel)
 
   (define event-count 10000)
   (define end
-    (let lp ((t (+ start one-hour)) (i 0))
+    (let lp ((t start+one-hour) (i 0))
       (if (< i event-count)
           (let ((t (+ t (random internal-time-units-per-second))))
             (timer-wheel-add! wheel t t)
