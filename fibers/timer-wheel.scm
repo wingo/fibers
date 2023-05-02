@@ -32,6 +32,8 @@
   #:export (make-timer-wheel
             timer-wheel-add!
             timer-wheel-next-entry-time
+            timer-wheel-next-tick-start
+            timer-wheel-next-tick-end
             timer-wheel-advance!
             timer-wheel-dump))
 
@@ -108,13 +110,19 @@
        (set-timer-wheel-outer! inner outer)
        outer))))
 
-(define (next-tick-time time-base cur shift)
+(define (next-tick-start time-base cur shift)
   (+ time-base (ash cur shift)))
+(define (next-tick-end time-base cur shift)
+  (next-tick-start time-base (1+ cur) shift))
 
-(define (timer-wheel-next-tick-time wheel)
+(define (timer-wheel-next-tick-start wheel)
   (match wheel
     (($ <timer-wheel> time-base shift cur slots outer)
-     (next-tick-time time-base cur shift))))
+     (next-tick-start time-base cur shift))))
+(define (timer-wheel-next-tick-end wheel)
+  (match wheel
+    (($ <timer-wheel> time-base shift cur slots outer)
+     (next-tick-end time-base cur shift))))
 
 (define (timer-wheel-add! wheel t obj)
   (match wheel
@@ -122,7 +130,7 @@
      (unless (eq? next-entry-time 'unknown)
        (when (or (not next-entry-time) (< t next-entry-time))
          (set-timer-wheel-next-entry-time! wheel t)))
-     (let ((offset (ash (- t (next-tick-time time-base cur shift))
+     (let ((offset (ash (- t (next-tick-start time-base cur shift))
                         (- shift))))
        (cond
         ((< offset *slots*)
@@ -176,7 +184,7 @@
                               (/ t 1.0 internal-time-units-per-second))))
   (match wheel
     (($ <timer-wheel> time-base shift cur slots outer)
-     (let ((start (next-tick-time time-base cur shift)))
+     (let ((start (next-tick-start time-base cur shift)))
        (let lp ((i 0))
          (when (< i *slots*)
            (let* ((head (vector-ref slots (logand *slots-mask* (+ cur i))))
@@ -237,56 +245,8 @@
   (match wheel
     (($ <timer-wheel> time-base shift cur slots outer)
      (let ((inc (ash 1 shift)))
-       (let lp ((next-tick-end (+ (next-tick-time time-base cur shift) inc)))
-         (when (< next-tick-end t)
+       (let lp ((next-tick-end (next-tick-end time-base cur shift)))
+         (when (<= next-tick-end t)
            (tick!)
            (lp (+ next-tick-end inc))))))))
 
-(define (self-test)
-  (define start (get-internal-real-time))
-  (define wheel (make-timer-wheel #:now start))
-  
-  (define one-hour (* 60 60 internal-time-units-per-second))
-  ;; At millisecond precision, advancing the wheel by an hour shouldn't
-  ;; take perceptible time.
-  (timer-wheel-advance! wheel one-hour error)
-
-  ;; (timer-wheel-dump wheel)
-
-  (define event-count 10000)
-  (define end
-    (let lp ((t (+ start one-hour)) (i 0))
-      (if (< i event-count)
-          (let ((t (+ t (random internal-time-units-per-second))))
-            (timer-wheel-add! wheel t t)
-            (lp t (1+ i)))
-          t)))
-
-  ;; (timer-wheel-dump wheel)
-
-  (define last 0)
-  (define count 0)
-  (define (check! t)
-    ;; The timer wheel only guarantees ordering between ticks, not
-    ;; ordering within a tick.  It doesn't even guarantee insertion
-    ;; order within a tick.  However for this test we know that
-    ;; insertion order is preserved.
-    (unless (<= last t) (error "unexpected tick" last t))
-    (set! last t)
-    (set! count (1+ count))
-    ;; Check that timers fire within the tick that they should.
-    (define tick-start (timer-wheel-next-tick-time wheel))
-    (define tick-end (+ tick-start (ash 1 (timer-wheel-shift wheel))))
-    (when (< t tick-start)
-      (error "tick late" tick-start t tick-end))
-    (when (<= tick-end t)
-      (error "tick early" tick-start t tick-end)))
-
-  ;; The precision of the timer is at least milliseconds, and it won't
-  ;; advance until all time in the current tick has passed, to to get
-  ;; all the events we need to advance by an additional millisecond.
-  (define millisecond
-    (inexact->exact (ceiling (* 1e-3 internal-time-units-per-second))))
-  (timer-wheel-advance! wheel (+ end millisecond) check!)
-  (unless (= count event-count) (error "what4"))
-  #t)

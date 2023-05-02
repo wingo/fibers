@@ -118,7 +118,8 @@ TESTS = \
 	tests/io-wakeup.scm \
 	tests/parameters.scm \
 	tests/preemption.scm \
-	tests/speedup.scm
+	tests/speedup.scm \
+	tests/timer-wheel.scm
 
 # The following tests require SOCK_NONBLOCK and SOCK_CLOEXEC. For now we just
 # run them on a platform that supports epoll (probably Linux).
