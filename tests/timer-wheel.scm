@@ -55,12 +55,12 @@
     (set! last t)
     (set! count (1+ count))
     ;; Check that timers fire within the tick that they should.
-    (define tick-start (timer-wheel-next-tick-start wheel))
-    (define tick-end (timer-wheel-next-tick-end wheel))
-    (when (< t tick-start)
-      (error "tick late" tick-start t tick-end))
-    (when (<= tick-end t)
-      (error "tick early" tick-start t tick-end)))
+    (let ((tick-start (timer-wheel-next-tick-start wheel))
+          (tick-end (timer-wheel-next-tick-end wheel)))
+      (when (< t tick-start)
+        (error "tick late" tick-start t tick-end))
+      (when (<= tick-end t)
+        (error "tick early" tick-start t tick-end))))
 
   (timer-wheel-advance! wheel end check!)
   ;; The precision of the timer is at least milliseconds, and it won't
