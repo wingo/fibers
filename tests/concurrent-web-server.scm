@@ -45,28 +45,29 @@
 
 (define port 8080)
 
-(define (handler request body)
-  (match (uri-path (request-uri request))
-    ("/"
-     (values '((content-type . (text/plain)))
-             "Hello, World!"))
-    ("/proc"
-     (let ((bv
-            (uint-list->bytevector (iota 10000)
-                                   (endianness little)
-                                   4)))
-       (values `((content-type   . (application/octet-stream))
-                 (content-length . ,(bytevector-length bv)))
+(define (handler request)
+  (let ((body (read-request-body request)))
+    (match (uri-path (request-uri request))
+      ("/"
+       (values '((content-type . (text/plain)))
+               "Hello, World!"))
+      ("/proc"
+       (let ((bv
+              (uint-list->bytevector (iota 10000)
+                                     (endianness little)
+                                     4)))
+         (values `((content-type   . (application/octet-stream))
+                   (content-length . ,(bytevector-length bv)))
+                 (lambda (port)
+                   (put-bytevector port bv)))))
+      ("/proc-chunked"
+       (values `((content-type   . (application/octet-stream)))
                (lambda (port)
-                 (put-bytevector port bv)))))
-    ("/proc-chunked"
-     (values `((content-type   . (application/octet-stream)))
-             (lambda (port)
-               (put-bytevector
-                port
-                (uint-list->bytevector (iota 10000)
-                                       (endianness little)
-                                       4)))))))
+                 (put-bytevector
+                  port
+                  (uint-list->bytevector (iota 10000)
+                                         (endianness little)
+                                         4))))))))
 
 (call-with-new-thread
  (lambda ()
