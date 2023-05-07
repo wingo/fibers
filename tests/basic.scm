@@ -1,6 +1,6 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
-;;;; Copyright (C) 2016 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016, 2023 Free Software Foundation, Inc.
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -83,8 +83,8 @@
 (assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
 (assert-run-fibers-terminates (do-times 1000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
 (assert-run-fibers-terminates (do-times 10000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
-(assert-run-fibers-terminates (do-times 20000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
-(assert-run-fibers-terminates (do-times 40000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
+(assert-run-fibers-terminates (do-times 1000000 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
 
 (define (spawn-fiber-tree n leaf)
   (do-times n (spawn-fiber
@@ -92,7 +92,7 @@
                  (if (= n 1)
                      (leaf)
                      (spawn-fiber-tree (1- n) leaf))))))
-(assert-run-fibers-terminates (spawn-fiber-tree 5 (lambda () (sleep 1))) #:drain? #t)
+(assert-run-fibers-terminates (spawn-fiber-tree 7 (lambda () (sleep 1))) #:drain? #t)
 
 (define (spawn-fiber-chain n)
   (spawn-fiber

@@ -1,5 +1,5 @@
 # fibers
-# Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
+# Copyright (C) 2016, 2023 Andy Wingo <wingo@pobox.com>
 # Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
 # Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 # Copyright (C) 2023 Maxime Devos <maximedevos@telenet.be>
@@ -48,6 +48,7 @@ SOURCES = \
 	fibers/scheduler.scm \
 	fibers/stack.scm \
 	fibers/timers.scm \
+	fibers/timer-wheel.scm \
 	fibers/web/server.scm \
 	web/server/fibers.scm
 
@@ -117,7 +118,8 @@ TESTS = \
 	tests/io-wakeup.scm \
 	tests/parameters.scm \
 	tests/preemption.scm \
-	tests/speedup.scm
+	tests/speedup.scm \
+	tests/timer-wheel.scm
 
 # The following tests require SOCK_NONBLOCK and SOCK_CLOEXEC. For now we just
 # run them on a platform that supports epoll (probably Linux).

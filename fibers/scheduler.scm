@@ -1,6 +1,6 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
-;;;; Copyright (C) 2016-2022 Free Software Foundation, Inc.
+;;;; Copyright (C) 2016-2023 Free Software Foundation, Inc.
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -20,7 +20,7 @@
   #:use-module (srfi srfi-9)
   #:use-module (fibers events-impl)
   #:use-module (fibers stack)
-  #:use-module (fibers psq)
+  #:use-module (fibers timer-wheel)
   #:use-module (ice-9 atomic)
   #:use-module (ice-9 control)
   #:use-module (ice-9 match)
@@ -61,8 +61,8 @@
   (current-runqueue scheduler-current-runqueue)
   ;; fd -> (total-events (events . task) ...)
   (fd-waiters scheduler-fd-waiters)
-  ;; PSQ of expiry -> task
-  (timers scheduler-timers set-scheduler-timers!)
+  ;; timer wheel of expiry -> task
+  (timers scheduler-timers)
   ;; atomic parameter of thread
   (kernel-thread scheduler-kernel-thread)
   ;; list of sched
@@ -106,9 +106,7 @@
         (next-runqueue (make-empty-stack))
         (current-runqueue (make-empty-stack))
         (fd-waiters (make-hash-table))
-        (timers (make-psq (match-lambda*
-                            (((t1 . c1) (t2 . c2)) (< t1 t2)))
-                          <))
+        (timers (make-timer-wheel))
         (kernel-thread (make-atomic-parameter #f)))
     (let* ((sched (%make-scheduler events-impl runcount-box prompt-tag
                                    next-runqueue current-runqueue
@@ -201,19 +199,16 @@ remote kernel thread."
           (lp waiters)))))))
 
 (define (schedule-tasks-for-expired-timers sched)
-  ;; Schedule expired timer tasks in the order that they expired.
-  (let ((now (get-internal-real-time)))
-    (let expire-timers ((timers (scheduler-timers sched)))
-      (cond
-       ((or (psq-empty? timers)
-            (< now (car (psq-min timers))))
-        (set-scheduler-timers! sched timers))
-       (else
-        (call-with-values (lambda () (psq-pop timers))
-          (match-lambda*
-            (((_ . task) timers)
-             (schedule-task/no-wakeup sched task)
-             (expire-timers timers)))))))))
+  "Schedule expired timer tasks.  Note that the timer has a minimum
+precision; tasks whose expiry times are in the same timer tick will run
+in the order they were added to the timer, not the order of their times."
+  ;; No free variables to avoid making a closure for the common case
+  ;; in which no timers fire on this tick.
+  (define (schedule-on-current! task)
+    ;(pk 'schedule! (current-scheduler) task)
+    (schedule-task/no-wakeup (current-scheduler) task))
+  (timer-wheel-advance! (scheduler-timers sched) (get-internal-real-time)
+                        schedule-on-current!))
 
 (define (schedule-tasks-for-next-turn sched)
   ;; Called when all tasks from the current turn have been run.
@@ -224,11 +219,6 @@ remote kernel thread."
   ;; In any case, check the kernel to see if any of the fd's that we
   ;; are interested in are active, and in that case schedule their
   ;; corresponding tasks.  Also run any timers that have timed out.
-  (define (timers-expiry timers)
-    (and (not (psq-empty? timers))
-         (match (psq-min timers)
-           ((expiry . task)
-            expiry))))
   (define (update-expiry expiry)
     ;; If there are pending tasks, cause the events backend to return
     ;; immediately.
@@ -236,7 +226,8 @@ remote kernel thread."
         expiry
         0))
   (events-impl-run (scheduler-events-impl sched)
-                   #:expiry (timers-expiry (scheduler-timers sched))
+                   #:expiry (let ((wheel (scheduler-timers sched)))
+                              (timer-wheel-next-entry-time wheel))
                    #:update-expiry update-expiry
                    #:folder (lambda (fd revents sched)
                               (schedule-tasks-for-active-fd fd revents sched)
@@ -257,7 +248,7 @@ stolen."
 (define (scheduler-work-pending? sched)
   "Return @code{#t} if @var{sched} has any work pending: any tasks or
 any pending timeouts."
-  (not (and (psq-empty? (scheduler-timers sched))
+  (not (and (not (timer-wheel-next-entry-time (scheduler-timers sched)))
             (stack-empty? (scheduler-current-runqueue sched))
             (stack-empty? (scheduler-next-runqueue sched)))))
 
@@ -349,10 +340,7 @@ descriptor @var{fd} becomes readable."
   "Arrange to schedule @var{task} when the absolute real time is
 greater than or equal to @var{expiry}, expressed in internal time
 units."
-  (set-scheduler-timers! sched
-                         (psq-set (scheduler-timers sched)
-                                  (cons expiry task)
-                                  expiry)))
+  (timer-wheel-add! (scheduler-timers sched) expiry task))
 
 ;; Shim for Guile 2.1.5.
 (unless (defined? 'suspendable-continuation?)
