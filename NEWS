@@ -2,6 +2,21 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
+fibers 1.3.0 -- 2023-05-29
+==========================
+
+* Replace PSQ timer queue with new timer wheel.
+  (see https://github.com/wingo/fibers/pull/84)
+
+* Fix libevent cross-compilation issues.
+
+* Always define (getaffinity) and (setaffinity) if not found.
+
+* Rename 'scm_pipe2' to 'scm_fibers_pipe2' to fix a build error with Guile
+  3.0.9.
+
+* Fix bit-vector deprecation warnings.
+
 fibers 1.2.0 -- 2022-12-22
 ==========================
 

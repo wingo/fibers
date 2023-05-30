@@ -2,7 +2,7 @@ define(FIBERS_CONFIGURE_COPYRIGHT,[[
 
 Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
 Copyright (C) 2020 Abdulrahman Semrie <hsamireh@gmail.com>
-Copyright (C) 2020-2022 Aleix Conchillo Flaqué <aconchillo@gmail.com>
+Copyright (C) 2020-2023 Aleix Conchillo Flaqué <aconchillo@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as
@@ -21,7 +21,7 @@ License along with this program.  If not, see
 ]])
 
 AC_PREREQ([2.69])
-AC_INIT([fibers],[1.2.0])
+AC_INIT([fibers],[1.3.0])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIRS([m4])
