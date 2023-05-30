@@ -21,7 +21,7 @@ License along with this program.  If not, see
 ]])
 
 AC_PREREQ([2.69])
-AC_INIT([fibers],[1.3.0])
+AC_INIT([fibers],[1.3.1])
 AC_CONFIG_SRCDIR([env.in])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIRS([m4])
