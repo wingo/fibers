@@ -215,7 +215,8 @@ run_event_loop (void *p)
     microsec = -1;
   else if (data->timeout >= 0)
     {
-      microsec = data->timeout / time_units_per_microsec;
+      microsec = (time_units_per_microsec == 0)
+	? 0 : data->timeout / time_units_per_microsec;
       tv.tv_sec = 0;
       tv.tv_usec = microsec;
     }
