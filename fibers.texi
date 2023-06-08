@@ -12,7 +12,7 @@ This manual is for Fibers (version @value{VERSION}, updated
 @value{UPDATED})
 
 @noindent
-Copyright 2016 Andy Wingo@*
+Copyright 2016, 2023 Andy Wingo@*
 Copyright 2021 Maxime Devos@*
 Copyright 2022, 2023 Aleix Conchillo Flaqué
 
@@ -938,11 +938,14 @@ block.  This generally works, with some caveats.
 
 @enumerate
 @item
-The port type has to either never block, or support non-blocking I/O.
-Currently the only kind of port in Guile are file ports (including
-sockets), and for them this condition is fulfilled.  However notably
-non-blocking I/O is not supported for custom binary I/O ports, not yet
-anyway.  If you need this, get it fixed in Guile :)
+The port has to either never block, or support non-blocking I/O.
+Since Guile version 3.0.10, this is the case for all ports except
+those that use @code{libreadline}.  Any port type defined by an
+extension in C may not be suspendable, however, for example SSL ports
+from GnuTLS.  If you experience problems here, first upgrade your
+Guile, then ensure that any ports defined by extensions are
+suspendable, either by using non-blocking I/O and/or by implementing
+in Scheme using @code{make-custom-port} and the like.
 @item
 You have to make sure that any file port you operate on is opened in
 nonblocking mode.  @xref{Non-Blocking I/O,,,guile.info,Guile Reference
@@ -952,11 +955,11 @@ ports.
 You have to avoid any operation on ports that is not supported yet in
 Guile for non-blocking I/O.  Since non-blocking I/O is new in Guile,
 only some I/O operations are expressed in terms of the primitive
-operations.  Notably, Scheme @code{read}, @code{display}, and
-@code{write} are still implemented in C, which prevents any fiber that
-uses them from suspending and resuming correctly.  What will happen
-instead is that the call blocks instead of suspending.  If you find a
-situation like this, talk to Guile developers to get it fixed :)
+operations.  Notably, Scheme @code{display} and @code{write} are still
+implemented in C, which prevents any fiber that uses them from
+suspending and resuming correctly.  What will happen instead is that
+the call blocks instead of suspending.  If you find a situation like
+this, talk to Guile developers to get it fixed :)
 @item
 You can enable non-blocking I/O for local files, but Linux at least
 will always say that the local file is ready for I/O even if it has to
@@ -1033,8 +1036,8 @@ include:
 @code{equal?}
 @item Dynwind entry/exit handlers, but only when called due to nonlocal
 entry or exit
-@item R6RS custom binary port callbacks
-@item Legacy ``soft port'' callbacks
+@item R6RS custom port callbacks (for Guile before version 3.0.10)
+@item Legacy ``soft port'' callbacks (Guile before 3.0.10)
 @item R5RS ``delay'' callbacks
 @item Many module system callbacks (module transformers, etc)
 @item SRFI-13 string and character-set callbacks
@@ -1051,21 +1054,20 @@ This set will be reduced over time as more of @code{libguile} is
 rewritten in Scheme.
 
 Finally, for port operations, @xref{Non-Blocking
-I/O,,,guile.info,Guile Reference Manual}.  When Guile tries to read
-from a file descriptor and nothing is available, normally it would
-call the current read waiter, which Fibers customizes to suspend the
-fiber and run another one in the meantime.  However for procedures
-that have not been rewritten in terms of the ``suspendable port
-operations'', notably including @code{read}, @code{write}, and
-@code{display}, the nothing-to-read condition is handled in C, not
-Scheme, so Guile cannot create a resumable continuation.  In this
-case, instead of erroring, Guile will wait until the file descriptor
-is readable or writable (as appropriate) and then continue.  However
-in the meantime, which may be forever, this blocks other fibers from
-running.  Therefore Fibers users sometimes have to be aware of the
-state of Guile's rewrite of port operations in terms of
-suspendable-port primitives, and to help out if things aren't moving
-fast enough :)
+I/O,,,guile.info,Guile Reference Manual}.  When Guile tries to read or
+write from a file descriptor but can't, normally it would call the
+current read waiter, which Fibers customizes to suspend the fiber and
+run another one in the meantime.  However for procedures that have not
+been rewritten in terms of the ``suspendable port operations'',
+notably including @code{write} and @code{display}, the blocking I/O
+condition is handled in C, not Scheme, so Guile cannot create a
+resumable continuation.  In this case, instead of erroring, Guile will
+wait until the file descriptor is readable or writable (as
+appropriate) and then continue.  However in the meantime, which may be
+forever, this blocks other fibers from running.  Therefore Fibers
+users sometimes have to be aware of the state of Guile's rewrite of
+port operations in terms of suspendable-port primitives, and to help
+out if things aren't moving fast enough :)
 
 @node Mutation
 @section Mutation
