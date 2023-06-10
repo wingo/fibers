@@ -66,13 +66,6 @@ free_libevt (void *ptr)
 }
 
 static void
-free_wait_data (void *ptr)
-{
-  struct wait_data *data = ptr;
-  scm_gc_free(data, sizeof (struct wait_data), "wait_data");
-}
-
-static void
 cb_func (evutil_socket_t fd, short what, void *arg)
 #define FUNC_NAME "primitive-event-loop"
 {
@@ -132,7 +125,7 @@ scm_primitive_create_event_base (SCM eventsv)
   data->maxevents = SCM_BYTEVECTOR_LENGTH (eventsv) / sizeof (struct event_data);
 
   return scm_list_2 (scm_from_pointer (libevt, free_libevt),
-                     scm_from_pointer (data, free_wait_data));
+                     scm_from_pointer (data, NULL));
 }
 #undef FUNC_NAME
 
