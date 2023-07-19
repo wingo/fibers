@@ -1,6 +1,6 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
-;;;; Copyright (C) 2022 Ludovic Courtès <ludo@gnu.org>
+;;;; Copyright (C) 2022, 2023 Ludovic Courtès <ludo@gnu.org>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -25,28 +25,9 @@
   #:use-module ((ice-9 ports internal)
                 #:select (port-read-wait-fd)))
 
-(define* (bind* sock address)
-  ;; Like 'bind', but retry upon EADDRINUSE.
-  (let loop ((n 5))
-    (define result
-      (catch 'system-error
-        (lambda ()
-          (bind sock address))
-        (lambda args
-          (if (and (= EADDRINUSE (system-error-errno args))
-                   (> n 0))
-              'in-use
-              (apply throw args)))))
-
-    (when (eq? result 'in-use)
-      (sleep 1)
-      (loop (- n 1)))))
-
-
 (run-fibers
  (lambda ()
-   (let* ((address (make-socket-address AF_INET INADDR_LOOPBACK 5556))
-          (notification (make-channel)))
+   (let ((notification (make-channel)))
      (spawn-fiber
       (lambda ()
         ;; The server.
@@ -60,13 +41,17 @@
                               0)))
             (pk 'listening-socket sock)
             (setsockopt sock SOL_SOCKET SO_REUSEADDR 1)
-            (bind* sock address)
+
+            ;; Let the OS pick an unused port.
+            (bind sock (make-socket-address AF_INET INADDR_LOOPBACK 0))
+
             (listen sock 1)
 
             (if (zero? n)
                 (begin
                   ;; Let's go.
-                  (put-message notification 'ready!)
+                  (put-message notification
+                               `(ready! ,(sockaddr:port (getsockname sock))))
                   (match (pk 'accepted-connection (accept sock SOCK_NONBLOCK))
                     ((connection . _)
                      (display (pk 'received (read-line connection)) connection)
@@ -95,10 +80,11 @@
 
      ;; Wait for the server to be ready.
      (match (get-message notification)
-       ('ready!
+       (('ready! port)
         ;; Connect, send a message, and receive its echo.
         (let ((sock (socket AF_INET (logior SOCK_NONBLOCK SOCK_STREAM)
-                            0)))
+                            0))
+              (address (make-socket-address AF_INET INADDR_LOOPBACK port)))
           (connect sock address)
           (pk 'connected address)
           (display "hello!\n" sock)
