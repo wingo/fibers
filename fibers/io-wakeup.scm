@@ -21,13 +21,18 @@
   #:use-module (fibers scheduler)
   #:use-module (fibers operations)
   #:use-module (ice-9 atomic)
+  #:use-module (ice-9 control)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 suspendable-ports)
   #:use-module (ice-9 threads)
   #:use-module (ice-9 ports internal)
   #:export (make-read-operation
 	    make-write-operation
 	    wait-until-port-readable-operation
-	    wait-until-port-writable-operation))
+	    wait-until-port-writable-operation
+	    accept-operation
+	    with-read-waiting-is-failure
+	    with-write-waiting-is-failure))
 
 (define *poll-sched* (make-atomic-box #f))
 
@@ -110,3 +115,67 @@ of the operation."
 (define (wait-until-port-writable-operation port)
   "Make an operation that will succeed when PORT is writable."
   (make-write-operation (try-ready readable? port) port))
+
+(define (with-x-waiting-is-failure port current-x-waiter try-fn)
+  "Return a thunk like TRY-FN, except that it also fails when
+TRY-FN invokes the procedure from the parameter CURRENT-X-WAITER on PORT.
+CURRENT-X-WAITER is a parameter like current-read-waiter or
+current-write-waiter.
+
+Due to technical limitations of current-read-waiter/current-write-waiter,
+TRY-FN may not modify CURRENT-X-WAITER in ways that this procedure might
+notice."
+  (lambda ()
+    (let/ec escape
+      (let* ((old-waiter (current-x-waiter))
+	     (new-waiter
+	      (lambda (port*)
+		(if (eq? port port*)
+		    (escape #false)
+		    ;; Maybe TRY-FN is doing some logging?  Whatever is
+		    ;; happening, (fibers io-wakeup) shouldn't interfere.
+		    (old-waiter port*)))))
+	(parameterize ((current-x-waiter new-waiter))
+	  (try-fn))))))
+
+(define (with-read-waiting-is-failure port try-fn)
+  "Return a thunk like TRY-FN, except that it also fails when TRY-FN
+invokes the procedure from the parameter current-read-waiter on PORT.
+
+The read waiter at the current depth (relative to the invocation of
+the returned thunk) may not be changed while the thunk is being invoked."
+  (with-x-waiting-is-failure port current-read-waiter try-fn))
+
+(define (with-write-waiting-is-failure port try-fn)
+  "Return a thunk like TRY-FN, except that it also fails when TRY-FN
+invokes the procedure from the parameter current-write-waiter on PORT.
+
+The write waiter at the current depth (relative to the invocation of
+the returned thunk) may not be changed while the thunk is being invoked."
+  (with-x-waiting-is-failure port current-write-waiter try-fn))
+
+(define O_CLOEXEC*
+  (if (defined? 'O_CLOEXEC)
+      O_CLOEXEC ; doesn't exist on guile-2.2
+      0))
+
+(define* (accept-operation port #:key (flags (logior O_CLOEXEC* O_NONBLOCK)))
+  "Like '(accept port flags)', but as an operation.  Unlike
+'accept', 'O_NONBLOCK' is included in the default flags,
+which makes the accepted port non-blocking and hence suitable for
+use with Fibers.
+
+The flag 'O_CLOEXEC' is also included (if available).  Without
+this flag, ports would be leaked to subprocesses by default, which
+usually is at best inefficient and at worst a security problem.  But
+rarely, ports are intended to be leaked to subprocesses, in which
+case you could remove this flag.
+
+Fibers doesn't emulate 'O_CLOEXEC' when unavailable, because it
+would not be entirely equivalent in case of parallelism."
+  (define (try)
+    (let ((new (accept port flags)))
+      (and new (lambda () (values new)))))
+  (make-read-operation
+   (with-read-waiting-is-failure port try)
+   port))

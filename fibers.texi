@@ -773,6 +773,75 @@ either returns @code{#false}, indicating failure, or a thunk, whose
 return values are the result of the operation.
 @end defun
 
+Often, failure is indicated by a procedure calling the thunk of
+@code{current-read-waiter} or @code{current-write-waiter}.  In that
+case, the following two procedures can be useful:
+
+@defun with-read-waiting-is-failure port try-fn
+Return a thunk like @var{try-fn}, except that it also fails when
+@var{try-fn} the procedure from the parameter
+@code{current-write-waiter} is invoked on @var{port}.
+
+The read waiter at the current depth (relative to the invocation of
+the returned thunk) may not be changed while the thunk is being invoked.
+@end defun
+
+@defun with-write-waiting-is-failure port try-fn
+Return a thunk like @var{try-fn}, except that it also fails when
+@var{try-fn} the procedure from the parameter
+@code{current-write-waiter} is invoked on @var{port}.
+
+The write waiter at the current depth (relative to the invocation of
+the returned thunk) may not be changed while the thunk is being invoked.
+@end defun
+
+These two procedures need to install a new read/write waiter, but this
+waiter doesn't cover all situations and as such might need to call the
+‘previous’ waiter in turn.  The waiter has two options for accessing
+the previous waiter:
+
+@itemize
+@item the constructed thunk could save the at the time current waiter
+(this is what's done currently)
+@item the read waiter could look ‘deeper’ in the fluid stack by using
+@code{fluid-ref*}
+@end itemize
+
+The first option also has a problem: if prompts are used, it is
+possible that the ‘less deep’ waiter changes after the old ‘less deep’
+waiter was saved.
+
+The second option would be ideal, but the problem is that the waiter
+doesn't know how deep it is in the stack -- while it could iterate the
+fluid stack and use @code{eq?} what depths are possible, it might
+exist at multiple depths at the same time even though the waiter is
+‘fresh’ because of weird usage of prompts.
+
+Perhaps the solution is to add a ‘depth’ argument to the procedures of
+@code{current-read-waiter} and @code{current-write-waiter} or allow
+the waiter to return true or false to indicate whether it handled the
+situation or whether the previous waiter should be tried, but neither
+of these is implemented yet at time of writing.
+
+In the meantime, don't change the ‘less deep’ waiter while
+@code{with-read-waiter} / @code{with-write-waiter} is doing its thing!
+
+@defun accept-operation port [flags=(logior O_NONBLOCK O_CLOEXEC)]
+Like @code{(accept port flags)}, but as an operation.  Unlike
+@code{accept}, @code{O_NONBLOCK} is included in the default flags,
+which makes the accepted port non-blocking and hence suitable for
+use with Fibers.
+
+The flag @code{O_CLOEXEC} is also included (if available).  Without
+this flag, ports would be leaked to subprocesses by default, which
+usually is at best inefficient and at worst a security problem.  But
+rarely, ports are intended to be leaked to subprocesses, in which
+case you could remove this flag.
+
+Fibers doesn't emulate @code{O_CLOEXEC} when unavailable, because it
+would not be entirely equivalent in case of parallelism.
+@end defun
+
 @node REPL Commands
 @section REPL Commands
 
