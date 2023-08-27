@@ -5,7 +5,7 @@
 @c %**end of header
 
 @set VERSION 1.3.1
-@set UPDATED 30 May 2023
+@set UPDATED 22 August 2023
 
 @copying
 This manual is for Fibers (version @value{VERSION}, updated
@@ -13,7 +13,7 @@ This manual is for Fibers (version @value{VERSION}, updated
 
 @noindent
 Copyright 2016, 2023 Andy Wingo@*
-Copyright 2021 Maxime Devos@*
+Copyright 2021, 2023 Maxime Devos@*
 Copyright 2022, 2023 Aleix Conchillo Flaqué
 
 @quotation
@@ -751,6 +751,26 @@ succeeds when a connection becomes available.
 @defun wait-until-port-writable-operation port
 Make an operation that will succeed with no values when the output
 port @var{port} becomes writable.
+@end defun
+
+Usually, you don't only want to detect readiness, but also act upon
+it. While this can be accomplished by combining one of the previous
+two procedures with @code{wrap-operation}, the spurious wake-ups can
+be inconvenient. In that case, the following two procedures may be
+useful:
+
+@defun make-read-operation try-fn port
+Make an operation that tries @var{try-fn}, and when @var{try-fn}
+fails, blocks until @var{port} is readable.  @var{try} is a thunk that
+either returns @code{#false}, indicating failure, or a thunk, whose
+return values are the result of the operation.
+@end defun
+
+@defun make-write-operation try-fn port
+Make an operation that tries @var{try-fn}, and when @var{try-fn}
+fails, blocks until @var{port} is writable.  @var{try} is a thunk that
+either returns @code{#false}, indicating failure, or a thunk, whose
+return values are the result of the operation.
 @end defun
 
 @node REPL Commands

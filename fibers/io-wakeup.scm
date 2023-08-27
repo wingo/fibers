@@ -1,7 +1,7 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2016,2021 Free Software Foundation, Inc.
-;;;; Copyright (C) 2021 Maxime Devos
+;;;; Copyright (C) 2021,2023 Maxime Devos
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -24,7 +24,9 @@
   #:use-module (ice-9 match)
   #:use-module (ice-9 threads)
   #:use-module (ice-9 ports internal)
-  #:export (wait-until-port-readable-operation
+  #:export (make-read-operation
+	    make-write-operation
+	    wait-until-port-readable-operation
 	    wait-until-port-writable-operation))
 
 (define *poll-sched* (make-atomic-box #f))
@@ -56,37 +58,55 @@
     ((#() #() #()) #f)
     ((#() #(_) #()) #t)))
 
-(define (make-wait-operation ready? schedule-when-ready port port-ready-fd this-procedure)
-  (make-base-operation #f
-                       (lambda _
-                         (and (ready? port) values))
-                       (lambda (flag sched resume)
-                         (define (commit)
-                           (match (atomic-box-compare-and-swap! flag 'W 'S)
-                             ('W (resume values))
-                             ('C (commit))
-                             ('S #f)))
-                         (if sched
-                             (schedule-when-ready
-                              sched (port-ready-fd port) commit)
-                             (schedule-task
-                              (poll-sched)
-                              (lambda ()
-                                (perform-operation (this-procedure port))
-                                (commit)))))))
+(define (try-ready ready? port)
+  (lambda ()
+    (and (ready? port) values)))
+
+(define (make-wait-operation try-fn schedule-when-ready port port-ready-fd)
+  (letrec ((this-operation
+	    (make-base-operation
+	     #f
+	     try-fn
+	     (lambda (flag sched resume)
+	       (define (commit)
+		 (match (atomic-box-compare-and-swap! flag 'W 'S)
+			('W (resume values))
+			('C (commit))
+			('S #f)))
+	       (if sched
+		   (schedule-when-ready
+		    sched (port-ready-fd port) commit)
+		   (schedule-task
+		    (poll-sched)
+		    (lambda ()
+		      (perform-operation this-operation)
+		      (commit))))))))
+    this-operation))
+
+(define (make-read-operation try-fn port)
+  "Make an operation that tries TRY-FN, and when TRY-FN fails, blocks until
+the input port PORT is readable.  TRY-FN is a thunk that either returns #false,
+indicating failure, or a thunk, whose return values are the result of the
+operation."
+  (unless (input-port? port)
+    (error "refusing to wait forever for input on non-input port"))
+  (make-wait-operation try-fn schedule-task-when-fd-readable port
+		       port-read-wait-fd))
+
+(define (make-write-operation try-fn port)
+  "Make an operation that tries TRY-FN, and when TRY-FN fails, blocks until
+the output PORT is writable.  TRY-FN is a thunk that either returns #false,
+indicating failure, or a thunk, whose return values are the result
+of the operation."
+  (unless (output-port? port)
+    (error "refusing to wait forever for output on non-output port"))
+  (make-wait-operation try-fn schedule-task-when-fd-writable port
+		       port-write-wait-fd))
 
 (define (wait-until-port-readable-operation port)
   "Make an operation that will succeed when PORT is readable."
-  (unless (input-port? port)
-    (error "refusing to wait forever for input on non-input port"))
-  (make-wait-operation readable? schedule-task-when-fd-readable port
-                       port-read-wait-fd
-                       wait-until-port-readable-operation))
+  (make-read-operation (try-ready readable? port) port))
 
 (define (wait-until-port-writable-operation port)
   "Make an operation that will succeed when PORT is writable."
-  (unless (output-port? port)
-    (error "refusing to wait forever for output on non-output port"))
-  (make-wait-operation writable? schedule-task-when-fd-writable port
-                       port-write-wait-fd
-                       wait-until-port-writable-operation))
+  (make-write-operation (try-ready readable? port) port))
