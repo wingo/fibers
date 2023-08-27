@@ -2,6 +2,13 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
+Next version
+==========================
+
+* Implement new constructrs 'make-read-waiter' and 'make-write-waiter'
+  and related procedures to aid in defining new operations on ports.
+* Implement a new operation 'accept-operation' corresponding to 'accept'.
+
 fibers 1.3.1 -- 2023-05-30
 ==========================
 
@@ -127,6 +134,7 @@ fibers 0.1.0 -- 2016-07-02
 
 
 Copyright (C) 2016-2022 Andy Wingo <wingo at pobox dot com>
+Copyright (C) 2023 Maxime Devos <maximedevos at telenet dot be>
 
 Copying and distribution of this file, with or without modification, are
 permitted in any medium without royalty provided the copyright notice
