@@ -484,7 +484,8 @@ thread, use @code{run-fibers}.
        [#:scheduler=@code{#f}] @
        [#:parallelism=@code{(current-processor-count)}] @
        [#:cpus=@code{(getaffinity 0)}] @
-       [#:hz=@code{100}] [#:drain?=@code{#f}]
+       [#:hz=@code{100}] [#:drain?=@code{#f}] @
+       [#:steal-work?=@code{#t}]
 Run @var{init-thunk} within a fiber in a fresh scheduler, blocking
 until @var{init-thunk} returns.  Return the value(s) returned by the
 call to @var{init-thunk}.
@@ -532,6 +533,11 @@ time).  Note that preemption will only occur if the fiber can actually
 be suspended; @xref{Barriers}, for more information.  Pass @code{0}
 for @var{hz} to disable preemption, effectively making scheduling
 fully cooperative.
+
+By default @var{steal-work?} is @code{#t} which allows schedulers to
+steal work from other schedulers. This can be disabled to ensure
+scheduled tasks only ever get run on the scheduler they were scheduled
+on.
 @end defun
 
 @defun spawn-fiber thunk [scheduler=@code{(require-current-scheduler)}] @
@@ -839,10 +845,11 @@ make.  The resulting schedulers will all share the same prompt tag and
 will steal and share out work from among themselves.
 @end defun
 
-@defun run-scheduler sched finished?
+@defun run-scheduler sched finished? [steal-work?=@code{#t}]
 Run @var{sched} until calling the supplied @var{finished?} thunk
-returns true.  Return zero values.  Signal an error if @var{scheduler}
-is already running in some other kernel thread.
+returns true.  If @code{steal-work?} is true, enable work stealing
+from remote peers.  Return zero values.  Signal an error if
+@var{scheduler} is already running in some other kernel thread.
 @end defun
 
 @defun current-scheduler
