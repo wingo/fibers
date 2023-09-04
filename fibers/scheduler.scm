@@ -19,6 +19,7 @@
 
 (define-module (fibers scheduler)
   #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-9 gnu)
   #:use-module (fibers events-impl)
   #:use-module (fibers stack)
   #:use-module (fibers timer-wheel)
@@ -74,6 +75,22 @@
   ;; () -> sched
   (choose-parallel-scheduler scheduler-choose-parallel-scheduler
                              set-scheduler-choose-parallel-scheduler!))
+
+;; The key is to avoid printing remote-peers, as that would lead to
+;; infinite recursion in old versions of Guile.   Instead of printing
+;; remote-peers, print their addresses.  With the merging of the
+;; wip-custom-ports branch in Guile, this circularity doesn't need to
+;; be avoided anymore, but let's avoid the extreme verbosity that comes
+;; with printing the many <timer-entry>.
+(set-record-type-printer!
+ <scheduler>
+ (lambda (scheduler port)
+   ;; When compiling, it is asked to use (ice-9 format) instead.  Don't
+   ;; do that to avoid loading extra modules when a scheduler is never
+   ;; printed.
+   (format port "#<scheduler ~x (remote-peers: (~{~x~^ ~}))>"
+	   (object-address scheduler)
+	   (map object-address (scheduler-remote-peers scheduler)))))
 
 (define (make-atomic-parameter init)
   (let ((box (make-atomic-box init)))

@@ -21,7 +21,8 @@
 (define-module (tests basic)
   #:use-module (fibers)
   #:use-module (fibers conditions)
-  #:use-module (fibers scheduler))
+  #:use-module (fibers scheduler)
+  #:use-module ((system foreign) #:select (sizeof)))
 
 (define failed? #f)
 
@@ -66,6 +67,26 @@
     (let ((count (1- count)))
       exp
       (unless (zero? count) (lp count)))))
+
+
+;; Make sure that scheduler objects can be printed and that the output
+;; isn't overly long.
+;;
+;; Bug report for ‘can be printed’:
+;; * https://github.com/wingo/fibers/pull/82
+;; * https://github.com/wingo/fibers/issues/76
+;; If this hangs, that means there is a bug.
+(format #t "scheduler objects can be printed with a reasonable length:~%")
+(assert-equal #t
+	      (<= (string-length
+		   (pk (call-with-output-string
+			(lambda (port)
+			  (display (make-scheduler #:parallelism 4) port)))))
+		  (+ (string-length "#<scheduler  (remote-peers: (   ))>")
+		     ;; 4: number of addresses
+		     ;; (sizeof '*): size (in bytes) of an address
+		     ;; 2: bytes -> hexadecimal digits
+		     (* 4 2 (sizeof '*)))))
 
 (define (no-rewinding)
   (when (rewinding-for-scheduling?)
