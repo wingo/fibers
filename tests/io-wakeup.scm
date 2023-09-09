@@ -66,33 +66,47 @@
   (choice-operation op
                     (wrap-operation (sleep-operation seconds) wrap)))
 
-(define* (readable/timeout? port #:key (allowed-spurious 5))
-  "Does waiting for readability time-out?
-Allow @var{allowed-spurious} spurious wakeups."
-  (or (perform-operation
-	(with-timeout
-	 (wrap-operation (wait-until-port-readable-operation port)
-			 (lambda () #f))
-	 #:wrap (lambda () #t)))
-      (and (> allowed-spurious 0)
-	   (readable/timeout? port #:allowed-spurious
-			      (- allowed-spurious 1)))))
+(define (make-x/timeout? make-operation)
+  (define* (x/timeout? port #:key (allowed-spurious 5))
+    (or (perform-operation
+         (with-timeout
+          (wrap-operation (make-operation port)
+                          (lambda () #f))
+          #:wrap (lambda () #t)))
+        (and (> allowed-spurious 0)
+             (x/timeout? port #:allowed-spurious
+                         (- allowed-spurious 1)))))
+  x/timeout?)
 
-(define* (writable/timeout? port #:key (allowed-spurious 5))
-  "Does waiting for writability time-out?
-Allow @var{allowed-spurious} spurious wakeups."
-  (or (perform-operation
-       (with-timeout
-	(wrap-operation (wait-until-port-writable-operation port)
-			(lambda () #f))
-	#:wrap (lambda () #t)))
-      (and (> allowed-spurious 0)
-	   (writable/timeout? port #:allowed-spurious
-			      (- allowed-spurious 1)))))
+;; Does waiting for readability time-out?
+;; Allow @var{allowed-spurious} spurious wakeups.
+(define readable/timeout? (make-x/timeout? wait-until-port-readable-operation))
+;; Does waiting for writability time-out?
+;; Allow @var{allowed-spurious} spurious wakeups.
+(define writable/timeout? (make-x/timeout? wait-until-port-writable-operation))
+
+;; Like accept-operation, but return zero values
+;; and instead mutate accepted-socket.
+(define accepted-socket #false) ; (socket . socket-address)
+(define (accept*-operation port)
+  (wrap-operation (accept-operation port)
+		  (lambda (port)
+		    (set! accepted-socket port)
+		    (values))))
+
+;; Does waiting for an incoming socket to accept time-out?
+;; Also, if a socket was accepted, set accepted-socket.
+;; Unlike readable/timeout? / writable-timeout?, there is no notion
+;; of spurious wakeups.
+(define (accept*/timeout? port)
+  (perform-operation
+   (with-timeout
+    (wrap-operation (accept*-operation port) (lambda () #false))
+    #:wrap (lambda () #true))))
 
 ;; Tests:
 ;;  * wait-until-port-readable-operaton / wait-until-port-writable-operation
-;;    blocks if the port isn't ready for input / output.
+;;    / accept-operation blocks if the port isn't ready for input / output.
 ;;
 ;;    This is tested with a pipe (read & write)
 ;;    and a listening socket (read, or accept in this case).
@@ -107,8 +121,9 @@ Allow @var{allowed-spurious} spurious wakeups."
 ;; Blocking is detected with a small time-out.
 
 (define (make-listening-socket)
-  (let ((server (socket PF_INET SOCK_DGRAM 0)))
+  (let ((server (socket PF_INET SOCK_STREAM 0)))
     (bind server AF_INET INADDR_LOOPBACK 0)
+    (listen server 1) ; 1: backlog
     server))
 
 (let ((s (make-listening-socket)))
@@ -137,8 +152,7 @@ Allow @var{allowed-spurious} spurious wakeups."
   (assert-equal #t (readable/timeout? A))
 
   ;; The buffer is empty, so writability is expected.
-  (assert-run-fibers-returns (#f)
-			     (writable/timeout? B))
+  (assert-run-fibers-returns (#f) (writable/timeout? B))
   (assert-equal #f (writable/timeout? B))
 
   ;; Fill the buffer
@@ -158,6 +172,25 @@ Allow @var{allowed-spurious} spurious wakeups."
   ;; return #f.
   (assert-run-fibers-returns (#f)
 			     (readable/timeout? A)))
+
+(let ((s (make-listening-socket)))
+  (set-nonblocking! s)
+  ;; No sockets to accept yet.
+  (assert-run-fibers-returns (#t) (accept*/timeout? s))
+  (assert-equal #false accepted-socket)
+  (assert-equal #t (accept*/timeout? s))
+  (assert-equal #false accepted-socket)
+  (when accepted-socket
+    (close-port (car accepted-socket)))
+  (let ((t1 (socket PF_INET SOCK_STREAM 0)))
+    (connect t1 (getsockname s))
+    ;; There is a port waiting, so it should not timeout!
+    (assert-run-fibers-returns (#f) (accept*/timeout? s))
+    (assert-equal #true (pair? accepted-socket))
+    (when accepted-socket
+      (close-port (car accepted-socket)))
+    (close-port t1))
+  (close-port s))
 
 (exit (if failed? 1 0))
 

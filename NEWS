@@ -2,11 +2,14 @@ Fibers NEWS
 
 Fibers is a facility that provides Go-like concurrency for Guile Scheme.
 
-next version
+Next version
 ============
 
 * New procedure 'dynamic-wind*' that behaves like 'dynamic-wind' except
   for interacting nicely with rescheduling.
+* Implement new constructrs 'make-read-waiter' and 'make-write-waiter'
+  and related procedures to aid in defining new operations on ports.
+* Implement a new operation 'accept-operation' corresponding to 'accept'.
 
 fibers 1.3.1 -- 2023-05-30
 ==========================
