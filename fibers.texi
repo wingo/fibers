@@ -54,7 +54,7 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 * Examples::              Starting points for a hack.
 * Status::                Fibers is a work in progress.
 
-* Index::                 Index of concepts and procedures.
+* Index::                 Index of procedures.
 @end menu
 
 @end ifnottex
@@ -1573,9 +1573,6 @@ up to you.  Happy hacking and godspeed!
 
 @node Index
 @unnumbered Index
-@printindex cp
-@syncodeindex tp fn
-@syncodeindex vr fn
 @printindex fn
 
 @bye
