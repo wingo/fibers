@@ -284,6 +284,8 @@ value.  Return zero values."
         (cur (scheduler-current-runqueue sched))
         (steal-work! (work-stealer sched)))
     (define (run-task task)
+      ;; The only thread writing to the runcount box is the thread of SCHED,
+      ;; so no need for atomic-box-compare-and-swap! here.
       (atomic-box-set! runcount-box
                        (logand (1+ (atomic-box-ref runcount-box)) #xffffFFFF))
       (call-with-prompt tag
