@@ -282,7 +282,7 @@ is the main idea of a CSP-derived system called ``Concurrent ML''
 New Jersey by John Reppy, CML provides this abstraction, which in
 Fibers is called an @dfn{operation}@footnote{CML uses the term
 @dfn{event}, but we find this to be a confusing name.}.  Calling
-@code{send-operation} on a channel returns an operation, which is just
+@code{put-operation} on a channel returns an operation, which is just
 a value.  Operations are like closures in a way; a closure wraps up
 code in its environment, which can be later called many times or not
 at all.  Operations likewise can be @dfn{performed}@footnote{In CML,
