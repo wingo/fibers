@@ -114,7 +114,7 @@ of the operation."
 
 (define (wait-until-port-writable-operation port)
   "Make an operation that will succeed when PORT is writable."
-  (make-write-operation (try-ready readable? port) port))
+  (make-write-operation (try-ready writable? port) port))
 
 (define (with-x-waiting-is-failure port current-x-waiter try-fn)
   "Return a thunk like TRY-FN, except that it also fails when
