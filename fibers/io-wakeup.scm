@@ -51,8 +51,8 @@
 
 ;; These procedure are subject to spurious wakeups.
 
-(define (readable? port)
-  "Test if PORT is writable."
+(define (readable? file-port)
+  "Test if FILE-PORT is writable."
   (match (select (vector port) #() #() 0)
     ((#() #() #()) #f)
     ((#(_) #() #()) #t)))
@@ -108,13 +108,47 @@ of the operation."
   (make-wait-operation try-fn schedule-task-when-fd-writable port
 		       port-write-wait-fd))
 
-(define (wait-until-port-readable-operation port)
-  "Make an operation that will succeed when PORT is readable."
-  (make-read-operation (try-ready readable? port) port))
+(define (wrap-with-replacement-and-setter raw-wait-until-port-x-operation)
+  (define property (make-object-property))
+  (define procedure
+    (lambda (port)
+      (define replacement (property port))
+      (or replacement
+          (apply raw-wait-until-port-x-operation port rest))))
+  (define setter
+    (lambda (port operation-or-proc)
+      ;; early type check
+      (unless (operation? operation?)
+        (error "the new waiting operation must be an operation"))
+      (property port operation)))
+  ;; TODO: would be nice if set-procedure-documentation!, to copy over
+  ;; the documentation.
+  (define procedure-with-setter
+    (make-procedure-with-setter procedure setter))
+ 
+(define wait-until-port-readable-operation
+  (wrap-with-replacement-and-setter
+    (lambda (port)
+      "Return an operation that will succeed when PORT is readable.
 
-(define (wait-until-port-writable-operation port)
-  "Make an operation that will succeed when PORT is writable."
-  (make-write-operation (try-ready writable? port) port))
+By default, only file ports are supported.  For unsupported ports,
+a &no-port-readable-operation exception is raised."
+      (define replacement 
+        (if (file-port? port)
+            (make-read-operation (try-ready readable? port) port)
+            (raise-no-readable-exception port))))))
+
+(define wait-until-port-writable-operation
+  (wrap-with-replacement-and-setter
+    (lambda (port)
+      "Return an operation that will succeed when PORT is writable.
+
+By default, only file ports are supported.  For unsupported ports,
+a &no-port-writable-operation exception is raised."
+      (define replacement 
+        (if (file-port? port)
+            (make-read-operation (try-ready writable? port) port)
+            (raise-no-writable-exception port))))))
 
 (define (with-x-waiting-is-failure port current-x-waiter try-fn)
   "Return a thunk like TRY-FN, except that it also fails when
@@ -159,6 +193,8 @@ the returned thunk) may not be changed while the thunk is being invoked."
       O_CLOEXEC ; doesn't exist on guile-2.2
       0))
 
+(define accept-operation-property (make-object-property))
+
 (define* (accept-operation port #:key (flags (logior O_CLOEXEC* O_NONBLOCK)))
   "Like '(accept port flags)', but as an operation.  Unlike
 'accept', 'O_NONBLOCK' is included in the default flags,
@@ -176,6 +212,14 @@ would not be entirely equivalent in case of parallelism."
   (define (try)
     (let ((new (accept port flags)))
       (and new (lambda () (values new)))))
-  (make-read-operation
-   (with-read-waiting-is-failure port try)
-   port))
+  (define replacement (accept-operation-property port))
+  (cond (replacement (apply replacement flags))
+        ((file-port? port)
+         (make-read-operation
+           (with-read-waiting-is-failure port try)
+           port))
+        (#true (raise-no-accept-operation port))))
+
+(define (set-accept-operation! port proc)
+  (accept-operation-property port proc)) ; TODO
+
