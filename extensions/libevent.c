@@ -192,30 +192,27 @@ scm_primitive_resize (SCM lst, SCM eventsv)
 }
 #undef FUNC_NAME
 
-static uint64_t time_units_per_microsec;
+static uint64_t time_units_per_microsec, microsec_per_time_units;
 
 static void*
 run_event_loop (void *p)
 #define FUNC_NAME "primitive-event-loop"
 {
-  int ret = 0;
-  int microsec = 0;
-  struct timeval tv;
-
+  int ret;
   struct loop_data *data = p;
 
-  if (data->timeout < 0)
-    microsec = -1;
-  else if (data->timeout >= 0)
+  if (data->timeout >= 0)
     {
-      microsec = (time_units_per_microsec == 0)
-	? 0 : data->timeout / time_units_per_microsec;
-      tv.tv_sec = 0;
-      tv.tv_usec = microsec;
-    }
+      struct timeval tv;
 
-  if (microsec >= 0)
-    {
+      tv.tv_sec = data->timeout / scm_c_time_units_per_second;
+      tv.tv_usec =
+	time_units_per_microsec > 0
+	? ((data->timeout % scm_c_time_units_per_second)
+	   / time_units_per_microsec)
+	: ((data->timeout % scm_c_time_units_per_second)
+	   * microsec_per_time_units);
+
       ret = event_base_loopexit (data->base, &tv);
       if (ret == -1)
         SCM_MISC_ERROR ("event loop exit failed", SCM_EOL);
@@ -307,6 +304,7 @@ void
 init_fibers_libevt (void)
 {
   time_units_per_microsec = scm_c_time_units_per_second / 1000000;
+  microsec_per_time_units = 1000000 / scm_c_time_units_per_second;
 
   scm_c_define_gsubr ("primitive-event-wake", 1, 0, 0,
                       scm_primitive_event_wake);
