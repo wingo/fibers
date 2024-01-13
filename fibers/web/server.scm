@@ -186,36 +186,34 @@ on the procedure being called at any particular time."
             (lambda _ #t))
           (close-port client))
          (else
-          (call-with-values
-              (lambda ()
-                (catch #t
-                  (lambda ()
-                    (let* ((request (read-request client))
-                           (body (read-request-body request)))
-                      (values request body)))
-                  (lambda (key . args)
-                    (display "While reading request:\n" (current-error-port))
-                    (print-exception (current-error-port) #f key args)
-                    (values #f #f))))
-            (lambda (request body)
-              (call-with-values (lambda ()
-                                  (handle-request handler request body))
-                (lambda (response body)
-                  (write-response response client)
-                  (when body
-                    (if (procedure? body)
-                        (if (response-content-length response)
-                            (body client)
-                            (let ((chunked-port
-                                   (make-chunked-output-port client
-                                                             #:keep-alive? #t)))
-                              (body chunked-port)
-                              (close-port chunked-port)))
-                        (put-bytevector client body)))
-                  (force-output client)
-                  (if (keep-alive? response)
-                      (loop)
-                      (close-port client))))))))))
+          (let ((request
+                 (catch #t
+                   (lambda ()
+                     (let* ((request (read-request client))
+                            (body (read-request-body request)))
+                       request))
+                   (lambda (key . args)
+                     (display "While reading request:\n" (current-error-port))
+                     (print-exception (current-error-port) #f key args)
+                     #f))))
+            (call-with-values (lambda ()
+                                (handle-request handler request))
+              (lambda (response body)
+                (write-response response client)
+                (when body
+                  (if (procedure? body)
+                      (if (response-content-length response)
+                          (body client)
+                          (let ((chunked-port
+                                 (make-chunked-output-port client
+                                                           #:keep-alive? #t)))
+                            (body chunked-port)
+                            (close-port chunked-port)))
+                      (put-bytevector client body)))
+                (force-output client)
+                (if (keep-alive? response)
+                    (loop)
+                    (close-port client)))))))))
     (lambda (k . args)
       (close-port client))))
 
@@ -252,16 +250,16 @@ on the procedure being called at any particular time."
                      (socket (make-default-socket family addr port)))
   "Run the fibers web server.
 
-HANDLER should be a procedure that takes two arguments, the HTTP request
-and request body, and returns two values, the response and response
-body.
+HANDLER should be a procedure that takes one argument, the HTTP
+request and returns two values, the response and response body.
 
 For example, here is a simple \"Hello, World!\" server:
 
 @example
- (define (handler request body)
-   (values '((content-type . (text/plain)))
-           \"Hello, World!\"))
+ (define (handler request)
+   (let ((body (read-request-body request)))
+     (values '((content-type . (text/plain)))
+             \"Hello, World!\")))
  (run-server handler)
 @end example
 
