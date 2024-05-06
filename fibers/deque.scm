@@ -1,7 +1,7 @@
 ;; Double-ended queue
 
 ;;;; Copyright (C) 2016 Andy Wingo <wingo@pobox.com>
-;;;; Copyright (C) 2017 Christopher Allan Webber <cwebber@dustycloud.org>
+;;;; Copyright (C) 2017 Christine Lemmer-Webber <cwebber@dustycloud.org>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
