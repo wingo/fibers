@@ -60,21 +60,37 @@
             choice-operation
             perform-operation
 
-            make-base-operation))
+            make-base-operation
+            make-base-operation/internal))
 
 ;; Three possible values: W (waiting), C (claimed), or S (synched).
 ;; The meanings are as in the Parallel CML paper.
 (define-inlinable (make-op-state) (make-atomic-box 'W))
 
 (define-record-type <base-op>
-  (make-base-operation wrap-fn try-fn block-fn)
+  (%make-base-operation wrap-fn try-fn block-fn cancel-fn)
   base-op?
   ;; ((arg ...) -> (result ...)) | #f
   (wrap-fn base-op-wrap-fn)
   ;; () -> (thunk | #f)
   (try-fn base-op-try-fn)
   ;; (op-state sched resume-k) -> ()
-  (block-fn base-op-block-fn))
+  (block-fn base-op-block-fn)
+  ;; (sched) -> ()
+  (cancel-fn base-op-cancel-fn))                  ;for internal use so far
+
+(define* (make-base-operation/internal wrap-fn try-fn block-fn
+                                       #:optional (cancel-fn (const #f)))
+  "This internal-use-only variant of @code{make-base-operation} has an extra
+@var{cancel-fn} argument: a procedure to cancel this operation when, as part
+of a \"choice\" operation, it has not been chosen.
+
+This variant is kept internal while the interface and its consequences are
+being discussed.  Do NOT use it in external code."
+  (%make-base-operation wrap-fn try-fn block-fn cancel-fn))
+
+(define (make-base-operation wrap-fn try-fn block-fn)
+  (%make-base-operation wrap-fn try-fn block-fn (const #f)))
 
 (define-record-type <choice-op>
   (make-choice-operation base-ops)
@@ -121,6 +137,18 @@ succeeds, will succeed with one and only one of the sub-operations
     ((base-op) base-op)
     (base-ops (make-choice-operation (list->vector base-ops)))))
 
+(define (cancel-other-operations op index)
+  "Assuming @var{op} is a choice operation, cancel every operation but the
+one at @var{index}."
+  (match op
+    (($ <choice-op> base-ops)
+     (let loop ((i 0))
+       (when (< i (vector-length base-ops))
+         (unless (= i index)
+           (match (vector-ref base-ops i)
+             (($ <base-op> wrap-fn try-fn block-fn cancel-fn)
+              (cancel-fn (current-scheduler))))))))))
+
 (define (perform-operation op)
   "Perform the operation @var{op} and return the resulting values.  If
 the operation cannot complete directly, block until it can complete."
@@ -141,7 +169,10 @@ the operation cannot complete directly, block until it can complete."
            (when (< i (vector-length base-ops))
              (match (vector-ref base-ops i)
                (($ <base-op> wrap-fn try-fn block-fn)
-                (block-fn flag sched (wrap-resume resume wrap-fn))))
+                (let ((resume (lambda (thunk)
+                                (cancel-other-operations op i)
+                                (resume thunk))))
+                  (block-fn flag sched (wrap-resume resume wrap-fn)))))
              (lp (1+ i))))))))
 
   (define (suspend)
