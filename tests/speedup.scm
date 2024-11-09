@@ -53,6 +53,14 @@
         (lp (1+ i) (make-vector (- words 2) #f))
         x)))
 
+(unless (getenv "FIBERS_EXPENSIVE_TESTS")
+  (newline (current-error-port))
+  (format (current-error-port) "Skipping expensive test/benchmark.~%")
+  (format (current-error-port) "\
+Set the 'FIBERS_EXPENSIVE_TESTS' environment variable to run it.~%")
+  (newline (current-error-port))
+  (exit 77))
+
 (measure-speedup
  (do-times 100000 (spawn-fiber (lambda () #t) #:parallel? #t)))
 (measure-speedup
