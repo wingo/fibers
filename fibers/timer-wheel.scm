@@ -31,7 +31,6 @@
   #:use-module (ice-9 format)
   #:export (make-timer-wheel
             timer-wheel-add!
-            timer-wheel-remove!
             timer-wheel-next-entry-time
             timer-wheel-next-tick-start
             timer-wheel-next-tick-end
@@ -141,18 +140,6 @@
            entry))
         (else
          (timer-wheel-add! (or outer (add-outer-wheel! wheel)) t obj)))))))
-
-(define (timer-wheel-remove! wheel entry)
-  "Remove @var{entry}, a timer entry as returned by @code{timer-wheel-add!},
-from @var{wheel}."
-  (match entry
-    (($ <timer-entry> prev next)
-     (when prev
-       (set-timer-entry-next! prev next)
-       (set-timer-entry-prev! entry #f))
-     (when next
-       (set-timer-entry-prev! next prev)
-       (set-timer-entry-next! entry #f)))))
 
 (define (timer-wheel-next-entry-time wheel)
   (define (slot-min-time head)
