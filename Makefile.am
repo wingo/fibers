@@ -139,6 +139,7 @@ EXTRA_DIST += \
 	$(TESTS) \
 	env.in \
         guix.scm \
+        .guix/manifest.scm \
         .guix/modules/fibers-package.scm \
 	HACKING \
         COPYING.LESSER \
