@@ -23,6 +23,6 @@ EXTRA_DIST = $(SOURCES) $(NOCOMP_SOURCES)
 GUILE_WARNINGS = -Wunbound-variable -Warity-mismatch -Wformat
 SUFFIXES = .scm .go
 .scm.go:
-	$(AM_V_GEN) $(top_builddir)/env	\
+	$(AM_V_GEN) GUILE_AUTO_COMPILE=0 $(top_builddir)/env		\
 	  $(GUILE_TOOLS) compile $(GUILE_TARGET) -L "$(abs_top_srcdir)"	\
 	  $(GUILE_WARNINGS) -o "$@" "$<"

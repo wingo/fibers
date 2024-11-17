@@ -244,9 +244,17 @@
 (assert-run-fibers-terminates (do-times 100000 (spawn-fiber (lambda () #t))) #:drain? #t)
 (assert-run-fibers-terminates (do-times 100000
                                         (spawn-fiber (lambda () #t) #:parallel? #t)) #:drain? #t)
-(define (loop-to-1e4) (let lp ((i 0)) (when (< i #e1e4) (lp (1+ i)))))
-(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4)) #:drain? #t)
-(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-to-1e4 #:parallel? #t)) #:drain? #t)
+
+(define %long-loop-iterations
+  ;; Number of iterations such that 'loop-long-enough' takes a while (~30s)
+  ;; or current hardware when this file is interpreted.
+  #e1e3)
+
+(define (loop-long-enough)
+  (let lp ((i 0)) (when (< i %long-loop-iterations) (lp (1+ i)))))
+
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-long-enough)) #:drain? #t)
+(assert-run-fibers-terminates (do-times 100000 (spawn-fiber loop-long-enough #:parallel? #t)) #:drain? #t)
 (assert-run-fibers-terminates (do-times 1 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
 (assert-run-fibers-terminates (do-times 10 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
 (assert-run-fibers-terminates (do-times 100 (spawn-fiber (lambda () (sleep 1)))) #:drain? #t)
