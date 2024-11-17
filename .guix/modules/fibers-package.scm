@@ -1,6 +1,7 @@
 ;; Fibers: cooperative, event-driven user-space threads.
 
 ;;;; Copyright (C) 2017 Christine Lemmer-Webber <cwebber@dustycloud.org>
+;;;; Copyright (C) 2024 Ludovic Courtès <ludo@gnu.org>
 ;;;;
 ;;;; This library is free software; you can redistribute it and/or
 ;;;; modify it under the terms of the GNU Lesser General Public
@@ -55,5 +56,19 @@ cores.  The Fibers library also provides Concurrent ML-like channels for
 communication between fibers.")
     (home-page "https://github.com/wingo/fibers")
     (license lgpl3+)))
+
+(define-public guile2.2-fibers
+  (package/inherit guile-fibers
+    (name "guile2.2-fibers")
+    (inputs (modify-inputs (package-inputs guile-fibers)
+              (replace "guile" guile-2.2)))))
+
+(define-public guile-fibers/libevent
+  (package/inherit guile-fibers
+    (name "guile-fibers-on-libevent")
+    (arguments
+     (list #:configure-flags #~(list "--disable-epoll")))
+    (inputs (modify-inputs (package-inputs guile-fibers)
+              (append libevent)))))
 
 guile-fibers
