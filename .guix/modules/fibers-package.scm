@@ -42,7 +42,8 @@
                         #:select? (git-predicate %source-dir)))
     (build-system gnu-build-system)
     (native-inputs
-     (list autoconf automake libtool texinfo gettext-minimal pkg-config))
+     (list autoconf automake libtool texinfo gettext-minimal pkg-config
+           (this-package-input "guile")))         ;for cross-compilation
     (inputs
      (list guile-3.0))
     (synopsis "Lightweight concurrency facility for Guile")
