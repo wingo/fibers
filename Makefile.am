@@ -138,6 +138,8 @@ EXTRA_DIST += \
 	$(bin_SCRIPTS) \
 	$(TESTS) \
 	env.in \
+        guix.scm \
+        .guix/modules/fibers-package.scm \
 	HACKING \
         COPYING.LESSER \
 	README.md \
