@@ -23,7 +23,12 @@
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (gnu packages)
-  #:use-module (gnu packages pkg-config))
+  #:use-module (gnu packages autotools)
+  #:use-module (gnu packages gettext)
+  #:use-module (gnu packages guile)
+  #:use-module (gnu packages libevent)
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages texinfo))
 
 (define %source-dir (in-vicinity (current-source-directory) "../.."))
 
@@ -36,11 +41,9 @@
                         #:select? (git-predicate %source-dir)))
     (build-system gnu-build-system)
     (native-inputs
-     (append (list pkg-config)
-             (map S '("autoconf" "automake" "libtool"
-                      "texinfo" "gettext-minimal"))))
+     (list autoconf automake libtool texinfo gettext-minimal pkg-config))
     (inputs
-     (list (S "guile")))
+     (list guile-3.0))
     (synopsis "Lightweight concurrency facility for Guile")
     (description
      "Fibers is a Guile library that implements a a lightweight concurrency
@@ -49,10 +52,7 @@ like a \"goroutine\" from the Go language: a lightweight thread-like
 abstraction.  Systems built with Fibers can scale up to millions of concurrent
 fibers, tens of thousands of concurrent socket connections, and many parallel
 cores.  The Fibers library also provides Concurrent ML-like channels for
-communication between fibers.
-
-Note that Fibers makes use of some Guile 2.1/2.2-specific features and
-is not available for Guile 2.0.")
+communication between fibers.")
     (home-page "https://github.com/wingo/fibers")
     (license lgpl3+)))
 
