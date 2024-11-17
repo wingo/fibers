@@ -66,15 +66,15 @@ Set the 'FIBERS_EXPENSIVE_TESTS' environment variable to run it.~%")
 (measure-speedup
  (do-times 40000 (spawn-fiber (lambda () (sleep 1)) #:parallel? #t)))
 (measure-speedup
- (do-times 100000 (spawn-fiber (lambda () (loop-to #e1e4)) #:parallel? #t)))
+ (do-times 100000 (spawn-fiber (lambda () (loop-to #e1e3)) #:parallel? #t)))
 (measure-speedup
- (do-times 10000 (spawn-fiber (lambda () (loop-to #e1e5)) #:parallel? #t)))
+ (do-times 10000 (spawn-fiber (lambda () (loop-to #e1e4)) #:parallel? #t)))
 (measure-speedup
- (do-times 1000 (spawn-fiber (lambda () (loop-to #e1e6)) #:parallel? #t)))
+ (do-times 1000 (spawn-fiber (lambda () (loop-to #e1e5)) #:parallel? #t)))
 
 (measure-speedup
- (do-times 100000 (spawn-fiber (lambda () (alloc-to 4 #e1e3)) #:parallel? #t)))
+ (do-times 100000 (spawn-fiber (lambda () (alloc-to 4 #e1e2)) #:parallel? #t)))
 (measure-speedup
- (do-times 10000 (spawn-fiber (lambda () (alloc-to 4 #e1e4)) #:parallel? #t)))
+ (do-times 10000 (spawn-fiber (lambda () (alloc-to 4 #e1e3)) #:parallel? #t)))
 (measure-speedup
- (do-times 1000 (spawn-fiber (lambda () (alloc-to 4 #e1e5)) #:parallel? #t)))
+ (do-times 1000 (spawn-fiber (lambda () (alloc-to 4 #e1e4)) #:parallel? #t)))

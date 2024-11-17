@@ -45,14 +45,6 @@
                       "texinfo" "gettext-minimal"))))
     (inputs
      (list (S "guile")))
-    (arguments
-     `(#:phases (modify-phases %standard-phases
-                  (add-before 'configure 'bootstrap
-                    (lambda _
-                      (zero? (system* "./autogen.sh"))))
-                  (add-before 'configure 'setenv
-                    (lambda _
-                      (setenv "GUILE_AUTO_COMPILE" "0"))))))
     (synopsis "Lightweight concurrency facility for Guile")
     (description
      "Fibers is a Guile library that implements a a lightweight concurrency

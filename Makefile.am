@@ -130,7 +130,9 @@ TESTS += \
 	tests/concurrent-web-server.scm
 endif
 
-TESTS_ENVIRONMENT=top_srcdir="$(abs_top_srcdir)" ./env $(GUILE) -s
+TESTS_ENVIRONMENT =				\
+  top_srcdir="$(abs_top_srcdir)" ./env		\
+  $(GUILE) --no-auto-compile -s
 
 EXTRA_DIST += \
 	$(bin_SCRIPTS) \
