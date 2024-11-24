@@ -35,7 +35,6 @@
             (scheduler-kernel-thread/public . scheduler-kernel-thread)
             scheduler-remote-peers
             scheduler-work-pending?
-            scheduler-timers
             choose-parallel-scheduler
             run-scheduler
             destroy-scheduler
