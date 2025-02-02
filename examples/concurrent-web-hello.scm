@@ -1,7 +1,9 @@
-(use-modules (fibers web server))
+(use-modules (http request)
+             (fibers web server))
 
-(define (handler request body)
-  (values '((content-type . (text/plain)))
-          "Hello, World!"))
+(define (handler request)
+  (let ((body (read-request-body request)))
+    (values '((content-type . (text/plain)))
+            "Hello, World!")))
 
 (run-server handler)
