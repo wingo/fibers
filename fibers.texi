@@ -826,20 +826,17 @@ of these is implemented yet at time of writing.
 In the meantime, don't change the ‘less deep’ waiter while
 @code{with-read-waiter} / @code{with-write-waiter} is doing its thing!
 
-@defun accept-operation port [flags=(logior O_NONBLOCK O_CLOEXEC)]
+@defun accept-operation port [flags=(logior SOCK_NONBLOCK SOCK_CLOEXEC)]
 Like @code{(accept port flags)}, but as an operation.  Unlike
-@code{accept}, @code{O_NONBLOCK} is included in the default flags,
+@code{accept}, @code{SOCK_NONBLOCK} is included in the default flags,
 which makes the accepted port non-blocking and hence suitable for
 use with Fibers.
 
-The flag @code{O_CLOEXEC} is also included (if available).  Without
-this flag, ports would be leaked to subprocesses by default, which
-usually is at best inefficient and at worst a security problem.  But
-rarely, ports are intended to be leaked to subprocesses, in which
-case you could remove this flag.
-
-Fibers doesn't emulate @code{O_CLOEXEC} when unavailable, because it
-would not be entirely equivalent in case of parallelism.
+The flag @code{SOCK_CLOEXEC} is also included.  Without this flag,
+ports would be leaked to subprocesses by default, which usually is at
+best inefficient and at worst a security problem.  But rarely, ports
+are intended to be leaked to subprocesses, in which case you could
+remove this flag.
 @end defun
 
 @node REPL Commands
