@@ -154,25 +154,17 @@ The write waiter at the current depth (relative to the invocation of
 the returned thunk) may not be changed while the thunk is being invoked."
   (with-x-waiting-is-failure port current-write-waiter try-fn))
 
-(define O_CLOEXEC*
-  (if (defined? 'O_CLOEXEC)
-      O_CLOEXEC ; doesn't exist on guile-2.2
-      0))
-
-(define* (accept-operation port #:key (flags (logior O_CLOEXEC* O_NONBLOCK)))
+(define* (accept-operation port #:key (flags (logior SOCK_CLOEXEC SOCK_NONBLOCK)))
   "Like '(accept port flags)', but as an operation.  Unlike
-'accept', 'O_NONBLOCK' is included in the default flags,
+'accept', 'SOCK_NONBLOCK' is included in the default flags,
 which makes the accepted port non-blocking and hence suitable for
 use with Fibers.
 
-The flag 'O_CLOEXEC' is also included (if available).  Without
-this flag, ports would be leaked to subprocesses by default, which
-usually is at best inefficient and at worst a security problem.  But
-rarely, ports are intended to be leaked to subprocesses, in which
-case you could remove this flag.
-
-Fibers doesn't emulate 'O_CLOEXEC' when unavailable, because it
-would not be entirely equivalent in case of parallelism."
+The flag 'SOCK_CLOEXEC' is also included.  Without this flag, ports
+would be leaked to subprocesses by default, which usually is at best
+inefficient and at worst a security problem.  But rarely, ports are
+intended to be leaked to subprocesses, in which case you could remove
+this flag."
   (define (try)
     (let ((new (accept port flags)))
       (and new (lambda () (values new)))))
