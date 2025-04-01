@@ -66,7 +66,19 @@
                 port
                 (uint-list->bytevector (iota 10000)
                                        (endianness little)
-                                       4)))))))
+                                       4)))))
+    ("/utf8-proc"
+     (values '((content-type . (text/plain
+                                (charset . "utf-8")))
+               (content-length . 3))
+             (lambda (port)
+               (display "☺" port))))
+    ("/utf8-proc-chunked"
+     (values '((content-type . (text/plain
+                                (charset . "utf-8"))))
+             (lambda (port)
+               (display "☺" port))))))
+
 
 (call-with-new-thread
  (lambda ()
@@ -97,5 +109,17 @@
             4)))
       (assert-equal 10000
                     (length data)))))
+
+(call-with-values
+    (lambda ()
+      (http-get (string->uri "http://127.0.0.1:8080/utf8-proc")))
+  (lambda (response body)
+    (assert-equal "☺" body)))
+
+(call-with-values
+    (lambda ()
+      (http-get (string->uri "http://127.0.0.1:8080/utf8-proc-chunked")))
+  (lambda (response body)
+    (assert-equal "☺" body)))
 
 (exit (if failed? 1 0))
