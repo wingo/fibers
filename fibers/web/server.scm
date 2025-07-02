@@ -249,7 +249,8 @@ on the procedure being called at any particular time."
                                (inet-pton family host)
                                INADDR_LOOPBACK))
                      (port 8080)
-                     (socket (make-default-socket family addr port)))
+                     (socket (make-default-socket family addr port))
+                     (init-thunk (lambda () #nil)))
   "Run the fibers web server.
 
 HANDLER should be a procedure that takes two arguments, the HTTP request
@@ -279,6 +280,7 @@ before sending back to the client."
      (lambda ()
        (run-fibers
         (lambda ()
+          (init-thunk)
           (spawn-fiber (lambda () (socket-loop socket handler)))
           (wait finished?))))
      finished?)))
