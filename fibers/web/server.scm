@@ -250,7 +250,7 @@ on the procedure being called at any particular time."
                                INADDR_LOOPBACK))
                      (port 8080)
                      (socket (make-default-socket family addr port))
-                     (init-thunk (lambda () #nil)))
+                     (init-thunk (lambda () #f)))
   "Run the fibers web server.
 
 HANDLER should be a procedure that takes two arguments, the HTTP request
