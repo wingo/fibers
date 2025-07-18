@@ -34,7 +34,7 @@
 ;;; This situation used to cause timer continuations to accumulate, thereby
 ;;; leading to unbounded heap growth.  The cancel function of
 ;;; 'timer-operation' fixes that by immediately canceling timers that lost in
-;;; a choice operation.  See <https://github.com/wingo/fibers/issues/109>.
+;;; a choice operation.  See <https://codeberg.org/fibers/fibers/issues/109>.
 
 (run-fibers
  (lambda ()

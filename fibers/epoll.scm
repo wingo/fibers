@@ -136,7 +136,7 @@ epoll wait (if appropriate)."
     ;; run-fibers completes before the fiber completes and afterwards
     ;; the condition is signalled.  In that case, we don't have to
     ;; resurrect the fiber or something, we can just do nothing.
-    ;; (Bug report: https://github.com/wingo/fibers/issues/61)
+    ;; (Bug report: https://codeberg.org/fibers/fibers/issues/61)
     ('dead #t)))
 
 (define (epoll-default-folder fd events seed)

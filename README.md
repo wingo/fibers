@@ -52,11 +52,11 @@ If you paste the above at into a Guile REPL, it prints out:
 
 Mailing List: `guile-user@gnu.org`
 
-Homepage: https://github.com/wingo/fibers
+Homepage: https://codeberg.org/fibers/fibers
 
-Download: https://github.com/wingo/fibers/releases
+Download: https://codeberg.org/fibers/fibers/releases
 
-Manual: https://github.com/wingo/fibers/wiki/Manual
+Manual: https://codeberg.org/fibers/fibers/wiki/Manual
 
 
 ## Build dependencies

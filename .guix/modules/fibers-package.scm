@@ -55,7 +55,7 @@ abstraction.  Systems built with Fibers can scale up to millions of concurrent
 fibers, tens of thousands of concurrent socket connections, and many parallel
 cores.  The Fibers library also provides Concurrent ML-like channels for
 communication between fibers.")
-    (home-page "https://github.com/wingo/fibers")
+    (home-page "https://codeberg.org/fibers/fibers")
     (license lgpl3+)))
 
 (define-public guile2.2-fibers

@@ -21,7 +21,7 @@ fibers 1.3.0 -- 2023-05-29
 ==========================
 
 * Replace PSQ timer queue with new timer wheel.
-  (see https://github.com/wingo/fibers/pull/84)
+  (see https://codeberg.org/fibers/fibers/pulls/84)
 
 * Fix libevent cross-compilation issues.
 

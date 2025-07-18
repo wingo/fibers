@@ -74,7 +74,7 @@ units.  The operation will succeed with no values."
      (when (and sched wheel-entry)
        ;; Remove WHEEL-ENTRY from the timer wheel right away to avoid
        ;; accumulating entries in the wheel.  See
-       ;; <https://github.com/wingo/fibers/issues/109>.
+       ;; <https://codeberg.org/fibers/fibers/issues/109>.
        (timer-wheel-remove! (scheduler-timers sched) wheel-entry)
        (set! wheel-entry #f)))))
 

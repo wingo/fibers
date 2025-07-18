@@ -73,8 +73,8 @@
 ;; isn't overly long.
 ;;
 ;; Bug report for ‘can be printed’:
-;; * https://github.com/wingo/fibers/pull/82
-;; * https://github.com/wingo/fibers/issues/76
+;; * https://codeberg.org/fibers/fibers/pulls/82
+;; * https://codeberg.org/fibers/fibers/issues/76
 ;; If this hangs, that means there is a bug.
 (format #t "scheduler objects can be printed with a reasonable length:~%")
 (assert-equal #t

@@ -81,7 +81,7 @@
 
 ;; Make a condition, wait for it inside a fiber, let the fiber abruptly
 ;; terminate and signal the condition afterwards.  This tests for the bug
-;; noticed at <https://github.com/wingo/fibers/issues/61>.
+;; noticed at <https://codeberg.org/fibers/fibers/issues/61>.
 (assert-equal #t
 	      (let ((cv (make-condition)))
 		(run-fibers
