@@ -51,21 +51,24 @@
 
 ;; These procedure are subject to spurious wakeups.
 
-(define (readable? port)
-  "Test if PORT is writable."
-  (match (select (vector port) #() #() 0)
+(define (readable? port-or-fd)
+  "Test if FD is writable."
+  (match (select (vector port-or-fd) #() #() 0)
     ((#() #() #()) #f)
     ((#(_) #() #()) #t)))
 
-(define (writable? port)
-  "Test if PORT is writable."
-  (match (select #() (vector port) #() 0)
+(define (writable? port-or-fd)
+  "Test if FD is writable."
+  (match (select #() (vector port-or-fd) #() 0)
     ((#() #() #()) #f)
     ((#() #(_) #()) #t)))
 
-(define (try-ready ready? port)
+(define (try-ready ready? port port-ready-fd)
   (lambda ()
-    (and (ready? port) values)))
+    (and (ready? (if (file-port? port)
+                     port
+                     (port-ready-fd port)))
+         values)))
 
 (define (make-wait-operation try-fn schedule-when-ready port port-ready-fd)
   (letrec ((this-operation
@@ -110,11 +113,11 @@ of the operation."
 
 (define (wait-until-port-readable-operation port)
   "Make an operation that will succeed when PORT is readable."
-  (make-read-operation (try-ready readable? port) port))
+  (make-read-operation (try-ready readable? port port-read-wait-fd) port))
 
 (define (wait-until-port-writable-operation port)
   "Make an operation that will succeed when PORT is writable."
-  (make-write-operation (try-ready writable? port) port))
+  (make-write-operation (try-ready writable? port port-write-wait-fd) port))
 
 (define (with-x-waiting-is-failure port current-x-waiter try-fn)
   "Return a thunk like TRY-FN, except that it also fails when
