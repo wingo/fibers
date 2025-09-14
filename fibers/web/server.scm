@@ -204,13 +204,24 @@ on the procedure being called at any particular time."
                   (write-response response client)
                   (when body
                     (if (procedure? body)
-                        (if (response-content-length response)
-                            (body client)
-                            (let ((chunked-port
-                                   (make-chunked-output-port client
-                                                             #:keep-alive? #t)))
-                              (body chunked-port)
-                              (close-port chunked-port)))
+                        (let* ((content-type
+                                (response-content-type response
+                                                       '(text/plain)))
+                               (declared-charset
+                                (assq-ref (cdr content-type) 'charset))
+                               (charset (or declared-charset "ISO-8859-1")))
+                          (if (response-content-length response)
+                              (begin
+                                ;; This will be reset in read-request
+                                ;; if the connection is kept alive
+                                (set-port-encoding! client charset)
+                                (body client))
+                              (let ((chunked-port
+                                     (make-chunked-output-port client
+                                                               #:keep-alive? #t)))
+                                (set-port-encoding! chunked-port charset)
+                                (body chunked-port)
+                                (close-port chunked-port))))
                         (put-bytevector client body)))
                   (force-output client)
                   (if (keep-alive? response)
